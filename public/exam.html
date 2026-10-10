@@ -17,7 +17,10 @@
     <section>
       <div class="card" style="padding:16px 22px">
         <div class="row between">
-          <strong id="progress-text">กำลังโหลด…</strong>
+          <div class="row" style="gap:16px;align-items:center">
+            <strong id="progress-text">กำลังโหลด…</strong>
+            <span class="muted hide-sm" id="timer-text" style="font-size:.88rem">⏱ เวลา: 00:00</span>
+          </div>
           <span class="savebadge" id="save-state"></span>
         </div>
         <div class="exam-progress" style="margin-top:10px"><div id="progress-bar"></div></div>
@@ -43,6 +46,19 @@
   let cur = 0;
   const pending = new Map();      // pos -> {chosen?, flagged?} รอบันทึก
   let submitting = false;
+
+  const startedAt = exam.started_at || (Date.now() / 1000);
+  function updateTimer() {
+    const elapsed = Math.max(0, Math.floor(Date.now() / 1000 - startedAt));
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    const str = (h > 0 ? `${h}:` : "") + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    const t = document.getElementById("timer-text");
+    if (t) t.textContent = `⏱ เวลาที่ใช้: ${str}`;
+  }
+  setInterval(updateTimer, 1000);
+  updateTimer();
 
   const $ = id => document.getElementById(id);
   const startHash = parseInt((location.hash.match(/q=(\d+)/) || [])[1], 10);

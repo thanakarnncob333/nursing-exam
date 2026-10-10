@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS exam_subject_scores (
 
 
 def connect():
+    os.makedirs(DATA_DIR, exist_ok=True)
     con = sqlite3.connect(DB_PATH, timeout=15, isolation_level=None)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
@@ -800,6 +801,12 @@ def index():
 @app.get("/<path:path>")
 def static_files(path):
     return send_from_directory(PUBLIC_DIR, path)
+
+
+@app.get("/favicon.ico")
+def favicon():
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#0284c7"/><path d="M38 20h24v24h24v24h-24v24h-24v-24h-24v-24h24z" fill="white"/></svg>"""
+    return Response(svg, mimetype="image/svg+xml")
 
 
 @app.get("/healthz")

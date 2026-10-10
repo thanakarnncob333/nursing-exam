@@ -36,11 +36,16 @@
   const pass = r.passed;
   const color = pass ? "var(--ok)" : "var(--bad)";
   const angle = Math.max(0, Math.min(100, r.percent)) * 3.6;
+  const durSec = (r.submitted_at && r.started_at) ? Math.max(0, Math.round(r.submitted_at - r.started_at)) : 0;
+  const durH = Math.floor(durSec / 3600);
+  const durM = Math.floor((durSec % 3600) / 60);
+  const durS = durSec % 60;
+  const durText = durSec > 0 ? (durH > 0 ? `${durH} ชม. ${durM} นาที` : `${durM} นาที ${durS} วินาที`) : "-";
   root.innerHTML = `
     <section class="card">
       <div class="row between" style="margin-bottom:10px">
         <div><h1 style="margin:0">ผลการสอบ</h1>
-          <div class="muted">${esc(r.owner.display_name)} (${esc(r.owner.username)}) · ส่งเมื่อ ${fmtDate(r.submitted_at)}</div></div>
+          <div class="muted">${esc(r.owner.display_name)} (${esc(r.owner.username)}) · ส่งเมื่อ ${fmtDate(r.submitted_at)} · ใช้เวลา: <strong>${durText}</strong></div></div>
         <a class="btn secondary" href="${backHref}">← กลับ</a>
       </div>
       <div class="grid cols-2" style="align-items:center;margin-top:10px">
