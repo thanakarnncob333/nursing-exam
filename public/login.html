@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เข้าสู่ระบบ | ฝึกทำข้อสอบการพยาบาล</title>
+<meta name="description" content="ระบบฝึกทำข้อสอบการพยาบาลสำหรับเตรียมสอบบรรจุข้าราชการ 9 วิชา พร้อมเฉลยและสรุปคะแนน">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="login-wrap">
+  <section class="card login-card">
+    <div class="login-hero">
+      <div class="brand-logo">✚</div>
+      <h1>ฝึกทำข้อสอบการพยาบาล</h1>
+      <p class="muted">เตรียมสอบบรรจุข้าราชการ · 9 วิชา · สุ่มข้อสอบทุกครั้ง</p>
+    </div>
+    <div id="msg"></div>
+    <form id="login-form" autocomplete="on">
+      <div class="field">
+        <label for="username">ชื่อผู้ใช้</label>
+        <input id="username" name="username" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">รหัสผ่าน</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn lg" id="btn-login" type="submit" style="width:100%;justify-content:center">เข้าสู่ระบบ</button>
+    </form>
+    <p class="muted" style="font-size:.85rem;margin-top:18px;text-align:center">
+      1 บัญชีเข้าสู่ระบบได้พร้อมกัน 1 อุปกรณ์เท่านั้น<br>หากยังไม่มีบัญชี กรุณาติดต่อผู้ดูแลระบบ
+    </p>
+  </section>
+</main>
+<script src="/js/common.js"></script>
+<script>
+(async () => {
+  const msg = document.getElementById("msg");
+  if (new URLSearchParams(location.search).get("expired")) {
+    msg.innerHTML = '<div class="alert info">session หมดอายุหรือถูกออกจากระบบ กรุณาเข้าสู่ระบบอีกครั้ง</div>';
+  }
+  // ถ้าล็อกอินอยู่แล้ว ไปหน้าหลักเลย
+  try { await api("/api/me", { noRedirect: true }); location.href = "/home.html"; return; } catch (_) {}
+
+  document.getElementById("login-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById("btn-login");
+    btn.disabled = true; msg.innerHTML = "";
+    try {
+      await api("/api/login", { method: "POST", noRedirect: true, body: {
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value } });
+      location.href = "/home.html";
+    } catch (e) {
+      msg.innerHTML = `<div class="alert error">${esc(e.message)}</div>`;
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

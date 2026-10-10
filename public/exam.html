@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ทำข้อสอบ | ฝึกทำข้อสอบการพยาบาล</title>
+<meta name="description" content="หน้าทำข้อสอบการพยาบาล">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>@media (max-width:640px){.hide-sm{display:none}}</style>
+</head>
+<body>
+<main class="container">
+  <div class="exam-layout">
+    <section>
+      <div class="card" style="padding:16px 22px">
+        <div class="row between">
+          <strong id="progress-text">กำลังโหลด…</strong>
+          <span class="savebadge" id="save-state"></span>
+        </div>
+        <div class="exam-progress" style="margin-top:10px"><div id="progress-bar"></div></div>
+      </div>
+      <div class="card" id="q-card" style="margin-top:18px">
+        <div class="empty">กำลังโหลดข้อสอบ…</div>
+      </div>
+    </section>
+    <aside class="card palette-card" aria-label="แผงเลขข้อ">
+      <div class="row between"><strong>แผงเลขข้อ</strong><span class="muted" style="font-size:.8rem">★ = ทำเครื่องหมาย</span></div>
+      <div id="palette"></div>
+      <button class="btn lg" id="btn-submit" style="width:100%;justify-content:center;margin-top:18px">ส่งข้อสอบ</button>
+    </aside>
+  </div>
+</main>
+<script src="/js/common.js"></script>
+<script>
+(async () => {
+  await initPage("exam");
+  const res = await api("/api/exam/current");
+  if (!res.exam) { location.href = "/home.html"; return; }
+  const exam = res.exam, items = exam.items;
+  let cur = 0;
+  const pending = new Map();      // pos -> {chosen?, flagged?} รอบันทึก
+  let submitting = false;
+
+  const $ = id => document.getElementById(id);
+  const startHash = parseInt((location.hash.match(/q=(\d+)/) || [])[1], 10);
+  if (startHash >= 1 && startHash <= items.length) cur = startHash - 1;
+  else { const firstUn = items.findIndex(i => i.chosen === null); cur = firstUn >= 0 ? firstUn : 0; }
+
+  /* ---------- บันทึกคำตอบ (มีคิวส่งซ้ำเมื่อเครือข่ายขัดข้อง) ---------- */
+  async function flush() {
+    if (!pending.size) { $("save-state").textContent = "✓ บันทึกแล้ว"; return; }
+    const entries = [...pending.entries()];
+    $("save-state").textContent = "กำลังบันทึก…";
+    for (const [pos, change] of entries) {
+      try {
+        await api("/api/exam/answer", { method: "POST", body: { exam_id: exam.id, pos, ...change } });
+        if (pending.get(pos) === change) pending.delete(pos);
+      } catch (e) {
+        if (e.status === 409 || e.status === 404) { toast(e.message, "error"); setTimeout(() => location.href = "/home.html", 1500); return; }
+        $("save-state").textContent = "⚠ บันทึกไม่สำเร็จ จะลองใหม่…";
+        return;
+      }
+    }
+    $("save-state").textContent = pending.size ? "กำลังบันทึก…" : "✓ บันทึกแล้ว";
+  }
+  setInterval(flush, 4000);
+  window.addEventListener("beforeunload", e => { if (pending.size && !submitting) { e.preventDefault(); e.returnValue = ""; } });
+
+  function queue(pos, patch) {
+    const prev = pending.get(pos) || {};
+    pending.set(pos, { ...prev, ...patch });
+    flush();
+  }
+
+  /* ---------- แสดงผล ---------- */
+  function answeredCount() { return items.filter(i => i.chosen !== null).length; }
+
+  function renderPalette() {
+    const groups = {};
+    items.forEach((it, idx) => (groups[it.subject_id] ||= { name: it.subject, list: [] }).list.push(idx));
+    $("palette").innerHTML = Object.entries(groups).map(([sid, g]) =>
+      `<div class="palette-sec">${sid}. ${esc(g.name)}</div><div class="palette">` +
+      g.list.map(idx => {
+        const it = items[idx];
+        return `<button class="pbtn ${it.chosen !== null ? "answered" : ""} ${idx === cur ? "current" : ""} ${it.flagged ? "flag" : ""}"
+          data-idx="${idx}" aria-label="ข้อ ${idx + 1}">${idx + 1}</button>`;
+      }).join("") + "</div>").join("");
+    $("palette").querySelectorAll(".pbtn").forEach(b => b.onclick = () => go(+b.dataset.idx));
+    const n = answeredCount();
+    $("progress-text").textContent = `ตอบแล้ว ${n} / ${items.length} ข้อ`;
+    $("progress-bar").style.width = (n * 100 / items.length) + "%";
+  }
+
+  function renderQuestion() {
+    const it = items[cur];
+    $("q-card").innerHTML = `
+      <div class="row between"><span class="q-subject">วิชา ${it.subject_id}: ${esc(it.subject)}</span>
+        <button class="btn ghost sm" id="btn-flag">${it.flagged ? "★ ยกเลิกเครื่องหมาย" : "☆ ทำเครื่องหมายไว้ทบทวน"}</button></div>
+      <div class="muted" style="font-size:.85rem;margin-bottom:6px">ข้อที่ ${cur + 1} จาก ${items.length}</div>
+      <div class="q-text">${esc(it.q)}</div>
+      <div id="choices">${it.choices.map((c, i) => `<button class="choice ${it.chosen === i ? "selected" : ""}" data-i="${i}">
+        <span class="key">${KEYS[i]}</span><span>${esc(c)}</span></button>`).join("")}</div>
+      <div class="q-nav">
+        <button class="btn secondary" id="btn-prev" ${cur === 0 ? "disabled" : ""}>← ข้อก่อนหน้า</button>
+        <button class="btn ghost" id="btn-clear" ${it.chosen === null ? "disabled" : ""}>ล้างคำตอบ</button>
+        <button class="btn" id="btn-next" ${cur === items.length - 1 ? "disabled" : ""}>ข้อถัดไป →</button>
+      </div>`;
+    $("choices").querySelectorAll(".choice").forEach(b => b.onclick = () => choose(+b.dataset.i));
+    $("btn-prev").onclick = () => go(cur - 1);
+    $("btn-next").onclick = () => go(cur + 1);
+    $("btn-clear").onclick = () => choose(null);
+    $("btn-flag").onclick = () => { it.flagged = !it.flagged; queue(it.pos, { flagged: it.flagged }); render(); };
+    history.replaceState(null, "", "#q=" + (cur + 1));
+  }
+
+  function render() { renderQuestion(); renderPalette(); }
+  function go(i) { if (i < 0 || i >= items.length) return; cur = i; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function choose(i) {
+    const it = items[cur];
+    it.chosen = i;
+    queue(it.pos, { chosen: i });
+    render();
+  }
+
+  document.addEventListener("keydown", e => {
+    if (document.querySelector(".modal-back") || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.key === "ArrowRight") go(cur + 1);
+    else if (e.key === "ArrowLeft") go(cur - 1);
+    else if (/^[1-4]$/.test(e.key)) { if (items[cur].choices[+e.key - 1] !== undefined) choose(+e.key - 1); }
+  });
+
+  /* ---------- ส่งข้อสอบ ---------- */
+  $("btn-submit").onclick = async () => {
+    await flush();
+    if (pending.size) { toast("ยังบันทึกคำตอบไม่ครบ กรุณารอสักครู่แล้วลองใหม่", "error"); return; }
+    const un = items.filter(i => i.chosen === null).map(i => items.indexOf(i) + 1);
+    const flagged = items.filter(i => i.flagged).length;
+    let msg = `ตอบแล้ว ${items.length - un.length} จาก ${items.length} ข้อ`;
+    if (un.length) msg += `\n\n⚠ ยังไม่ได้ตอบ ${un.length} ข้อ (นับเป็นผิด)\nข้อ: ${un.slice(0, 25).join(", ")}${un.length > 25 ? " …" : ""}`;
+    if (flagged) msg += `\n\n★ มี ${flagged} ข้อที่ทำเครื่องหมายไว้`;
+    msg += "\n\nเมื่อส่งแล้วจะแก้ไขคำตอบไม่ได้";
+    if (!await confirmBox("ยืนยันส่งข้อสอบ?", msg, "ส่งข้อสอบ")) return;
+    $("btn-submit").disabled = true;
+    try {
+      submitting = true;
+      const r = await api("/api/exam/submit", { method: "POST", body: { exam_id: exam.id } });
+      location.href = "/result.html?id=" + r.exam_id;
+    } catch (e) { submitting = false; toast(e.message, "error"); $("btn-submit").disabled = false; }
+  };
+
+  render();
+  $("save-state").textContent = "✓ บันทึกอัตโนมัติ";
+})().catch(e => { if (e.status !== 401) { console.error(e); toast(e.message, "error"); } });
+</script>
+</body>
+</html>

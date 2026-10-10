@@ -1,0 +1,21 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local Database & data
+data/
+*.db
+*.sqlite3
+
+# Tools binaries
+tools/*.exe
+
+# Environment
+.env
+
+# System
+.DS_Store
+Thumbs.db

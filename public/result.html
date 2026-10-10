@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ผลสอบและเฉลย | ฝึกทำข้อสอบการพยาบาล</title>
+<meta name="description" content="สรุปคะแนนและเฉลยข้อสอบการพยาบาลพร้อมคำอธิบาย">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>@media (max-width:640px){.hide-sm{display:none}}</style>
+</head>
+<body>
+<main class="container" id="root"><div class="card empty">กำลังโหลด…</div></main>
+<script src="/js/common.js"></script>
+<script>
+(async () => {
+  const me = await initPage(null);
+  const id = new URLSearchParams(location.search).get("id");
+  const root = document.getElementById("root");
+  let r;
+  try { r = (await api("/api/exams/" + encodeURIComponent(id))).result; }
+  catch (e) { root.innerHTML = `<div class="card"><div class="alert error">${esc(e.message)}</div><a class="btn" href="/home.html">กลับหน้าหลัก</a></div>`; return; }
+
+  const isOwner = r.owner.username === me.user.username;
+  const backHref = me.user.role === "admin" && !isOwner ? "/admin.html" : "/home.html";
+
+  if (r.status !== "submitted") {
+    root.innerHTML = `<div class="card"><h1>ข้อสอบของ ${esc(r.owner.display_name)}</h1>
+      <div class="alert info">ยังไม่ได้ส่งข้อสอบ — ตอบแล้ว ${r.progress.answered}/${r.progress.total} ข้อ</div>
+      <a class="btn secondary" href="${backHref}">← กลับ</a></div>`;
+    return;
+  }
+
+  const pass = r.passed;
+  const color = pass ? "var(--ok)" : "var(--bad)";
+  const angle = Math.max(0, Math.min(100, r.percent)) * 3.6;
+  root.innerHTML = `
+    <section class="card">
+      <div class="row between" style="margin-bottom:10px">
+        <div><h1 style="margin:0">ผลการสอบ</h1>
+          <div class="muted">${esc(r.owner.display_name)} (${esc(r.owner.username)}) · ส่งเมื่อ ${fmtDate(r.submitted_at)}</div></div>
+        <a class="btn secondary" href="${backHref}">← กลับ</a>
+      </div>
+      <div class="grid cols-2" style="align-items:center;margin-top:10px">
+        <div style="text-align:center">
+          <div class="score-ring" style="background:conic-gradient(${color} ${angle}deg, rgba(120,140,160,.2) 0)">
+            <div><div class="big" style="color:${color}">${r.score}<span style="font-size:1.2rem" class="muted">/${r.total}</span></div>
+            <div class="muted">${fmtPct(r.percent)}</div></div>
+          </div>
+          <div style="margin-top:16px"><span class="badge ${pass ? "ok" : "bad"}" style="font-size:1rem;padding:6px 18px">
+            ${pass ? "✔ ผ่านเกณฑ์" : "✘ ไม่ผ่านเกณฑ์"} (เกณฑ์ ${r.pass_percent}%)</span></div>
+        </div>
+        <div id="bars"></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>เฉลยละเอียด</h2>
+      <div class="tabs" id="tabs"></div>
+      <div id="review"></div>
+    </section>`;
+
+  document.getElementById("bars").innerHTML = "<strong>คะแนนรายวิชา</strong><div style='margin-top:12px'>" +
+    r.subjects.map(s => `<div class="bar-row"><span>${s.id}. ${esc(s.name)}</span>
+      <div class="bar"><div class="${s.percent < r.pass_percent ? "low" : ""}" style="width:0" data-w="${s.percent}"></div><span class="mark" style="left:${r.pass_percent}%"></span></div>
+      <strong>${s.correct}/${s.total}</strong></div>`).join("") + "</div>";
+  requestAnimationFrame(() => document.querySelectorAll(".bar > div[data-w]").forEach(b => b.style.width = b.dataset.w + "%"));
+
+  /* ---------- เฉลย ---------- */
+  let filter = "all";
+  const tabs = [["all", "ทั้งหมด"], ["wrong", `ข้อที่ผิด (${r.items.filter(i => !i.is_correct).length})`],
+                ["right", "ข้อที่ถูก"], ...r.subjects.map(s => ["s" + s.id, `วิชา ${s.id}`])];
+  function renderTabs() {
+    const t = document.getElementById("tabs");
+    t.innerHTML = tabs.map(([k, l]) => `<button class="tab ${k === filter ? "active" : ""}" data-k="${k}">${esc(l)}</button>`).join("");
+    t.querySelectorAll(".tab").forEach(b => b.onclick = () => { filter = b.dataset.k; renderTabs(); renderReview(); });
+  }
+  function renderReview() {
+    const list = r.items.filter(i => filter === "all" || (filter === "wrong" && !i.is_correct) ||
+      (filter === "right" && i.is_correct) || filter === "s" + i.subject_id);
+    document.getElementById("review").innerHTML = list.length ? list.map(it => `
+      <article class="review-item ${it.is_correct ? "is-ok" : "is-bad"}">
+        <div class="row between"><span class="q-subject">วิชา ${it.subject_id}: ${esc(it.subject)}</span>
+          <span class="badge ${it.is_correct ? "ok" : "bad"}">${it.chosen === null ? "ไม่ได้ตอบ" : it.is_correct ? "ถูก" : "ผิด"}</span></div>
+        <div class="q-text"><strong>ข้อ ${it.pos}.</strong> ${esc(it.q)}</div>
+        ${it.choices.map((c, i) => `<div class="choice review ${i === it.correct ? "correct" : i === it.chosen ? "wrong" : ""}">
+          <span class="key">${KEYS[i]}</span><span>${esc(c)}
+          ${i === it.correct ? ' <strong>✔ คำตอบที่ถูกต้อง</strong>' : ""}${i === it.chosen && i !== it.correct ? ' <strong>← คำตอบของคุณ</strong>' : ""}</span></div>`).join("")}
+        <div class="explain"><strong>เฉลย: ${KEYS[it.correct]}</strong><br>${esc(it.explanation || "-")}</div>
+      </article>`).join("") : '<div class="empty">ไม่มีรายการ</div>';
+  }
+  renderTabs(); renderReview();
+})().catch(e => { if (e.status !== 401) console.error(e); });
+</script>
+</body>
+</html>

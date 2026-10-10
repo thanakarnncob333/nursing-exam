@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>หน้าหลัก | ฝึกทำข้อสอบการพยาบาล</title>
+<meta name="description" content="เริ่มทำข้อสอบการพยาบาล ดูประวัติและผลคะแนนย้อนหลัง">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>@media (max-width:640px){.hide-sm{display:none}}</style>
+</head>
+<body>
+<main class="container">
+  <section class="card hero">
+    <div>
+      <h1>พร้อมฝึกสอบหรือยัง?</h1>
+      <p class="muted" id="hero-desc">กำลังโหลด…</p>
+      <div id="resume-box"></div>
+      <div class="row" style="margin-top:18px">
+        <button class="btn lg" id="btn-start">▶ เริ่มทำข้อสอบ</button>
+      </div>
+      <p class="muted" style="font-size:.88rem;margin-top:14px">
+        ไม่จำกัดเวลา · คำตอบถูกบันทึกอัตโนมัติ ปิดหน้าเว็บแล้วกลับมาทำต่อได้ · เฉลยแสดงหลังส่งข้อสอบ
+      </p>
+    </div>
+    <div>
+      <strong>วิชาที่สอบ</strong>
+      <ul class="subject-list" id="subjects"></ul>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>ประวัติการสอบของฉัน</h2>
+    <div id="history"><div class="empty">กำลังโหลด…</div></div>
+  </section>
+</main>
+<script src="/js/common.js"></script>
+<script>
+(async () => {
+  const me = await initPage("home");
+  const cfg = me.config;
+  const total = cfg.per_subject * cfg.subjects.length;
+  document.getElementById("hero-desc").textContent =
+    `ระบบจะสุ่มข้อสอบวิชาละ ${cfg.per_subject} ข้อ จาก ${cfg.subjects.length} วิชา รวม ${total} ข้อ · เกณฑ์ผ่าน ${cfg.pass_percent}%`;
+  document.getElementById("subjects").innerHTML =
+    cfg.subjects.map(s => `<li><span class="n">${s.id}</span>${esc(s.name)}</li>`).join("");
+
+  const cur = await api("/api/exam/current");
+  const startBtn = document.getElementById("btn-start");
+  if (cur.exam) {
+    const answered = cur.exam.items.filter(i => i.chosen !== null).length;
+    startBtn.textContent = "▶ ทำข้อสอบต่อ";
+    document.getElementById("resume-box").innerHTML =
+      `<div class="alert info" style="margin-top:12px">คุณมีข้อสอบที่ทำค้างอยู่ — ตอบแล้ว ${answered}/${cur.exam.total} ข้อ
+       <button class="btn ghost sm" id="btn-abandon" style="margin-left:8px">ยกเลิกชุดนี้</button></div>`;
+    document.getElementById("btn-abandon").onclick = async () => {
+      if (!await confirmBox("ยกเลิกชุดข้อสอบที่ทำค้าง?", "คำตอบทั้งหมดของชุดนี้จะถูกลบและเริ่มชุดใหม่ได้", "ยกเลิกชุดนี้", true)) return;
+      await api("/api/exam/abandon", { method: "POST", body: { exam_id: cur.exam.id } });
+      location.reload();
+    };
+  }
+  startBtn.onclick = async () => {
+    startBtn.disabled = true;
+    try { await api("/api/exam/start", { method: "POST" }); location.href = "/exam.html"; }
+    catch (e) { toast(e.message, "error"); startBtn.disabled = false; }
+  };
+
+  const h = await api("/api/exams");
+  const box = document.getElementById("history");
+  if (!h.exams.length) { box.innerHTML = '<div class="empty">ยังไม่มีประวัติการสอบ</div>'; return; }
+  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>ครั้งที่</th><th>เริ่มสอบ</th><th>ส่งเมื่อ</th><th>คะแนน</th><th>ร้อยละ</th><th>ผล</th><th></th></tr></thead><tbody>` +
+    h.exams.map((e, i) => `<tr>
+      <td>${h.exams.length - i}</td><td>${fmtDate(e.started_at)}</td><td>${fmtDate(e.submitted_at)}</td>
+      <td>${e.status === "submitted" ? e.score + "/" + e.total : "-"}</td><td>${fmtPct(e.percent)}</td>
+      <td>${e.status !== "submitted" ? '<span class="badge warn">กำลังทำ</span>' : e.passed ? '<span class="badge ok">ผ่าน</span>' : '<span class="badge bad">ไม่ผ่าน</span>'}</td>
+      <td>${e.status === "submitted" ? `<a class="btn sm secondary" href="/result.html?id=${e.id}">ดูผล/เฉลย</a>` : `<a class="btn sm" href="/exam.html">ทำต่อ</a>`}</td></tr>`).join("") +
+    "</tbody></table></div>";
+})().catch(e => { if (e.status !== 401) console.error(e); });
+</script>
+</body>
+</html>

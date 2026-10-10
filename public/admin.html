@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ผู้ดูแลระบบ | ฝึกทำข้อสอบการพยาบาล</title>
+<meta name="description" content="จัดการผู้ใช้งานและดูผลการสอบของผู้เข้าสอบทั้งหมด">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>@media (max-width:640px){.hide-sm{display:none}}</style>
+</head>
+<body>
+<main class="container">
+  <h1>ผู้ดูแลระบบ</h1>
+  <div class="tabs" id="main-tabs">
+    <button class="tab active" data-t="dash">ภาพรวม</button>
+    <button class="tab" data-t="users">ผู้ใช้งาน</button>
+    <button class="tab" data-t="exams">ผลการสอบทั้งหมด</button>
+  </div>
+
+  <section id="t-dash"></section>
+
+  <section id="t-users" class="hidden">
+    <div class="card">
+      <div class="row between" style="margin-bottom:14px"><h2 style="margin:0">ผู้ใช้งานทั้งหมด</h2>
+        <button class="btn" id="btn-add">＋ เพิ่มผู้ใช้</button></div>
+      <div id="users-box"></div>
+    </div>
+  </section>
+
+  <section id="t-exams" class="hidden">
+    <div class="card">
+      <div class="row between" style="margin-bottom:14px">
+        <h2 style="margin:0">ผลการสอบ</h2>
+        <div class="row">
+          <select id="f-user" style="width:220px"><option value="">ผู้ใช้ทั้งหมด</option></select>
+          <a class="btn secondary" href="/api/admin/exams.csv" id="btn-csv">⬇ ส่งออก CSV</a>
+        </div>
+      </div>
+      <div id="exams-box"></div>
+    </div>
+  </section>
+</main>
+<script src="/js/common.js"></script>
+<script>
+(async () => {
+  const me = await initPage("admin", { adminOnly: true });
+  const $ = id => document.getElementById(id);
+  let users = [];
+
+  /* ---------- แท็บ ---------- */
+  function showTab(t) {
+    document.querySelectorAll("#main-tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.t === t));
+    ["dash", "users", "exams"].forEach(k => $("t-" + k).classList.toggle("hidden", k !== t));
+    if (t === "dash") loadDash(); if (t === "users") loadUsers(); if (t === "exams") loadExams();
+    history.replaceState(null, "", "#" + t);
+  }
+  document.querySelectorAll("#main-tabs .tab").forEach(b => b.onclick = () => showTab(b.dataset.t));
+
+  /* ---------- ภาพรวม ---------- */
+  async function loadDash() {
+    const s = await api("/api/admin/stats");
+    $("t-dash").innerHTML = `<div class="grid cols-4">
+      <div class="stat"><div class="num">${s.users}</div><div class="lbl">ผู้ใช้ทั้งหมด</div></div>
+      <div class="stat"><div class="num">${s.online}</div><div class="lbl">ออนไลน์ขณะนี้</div></div>
+      <div class="stat"><div class="num">${s.exams_submitted}</div><div class="lbl">ส่งข้อสอบแล้ว (ครั้ง)</div></div>
+      <div class="stat"><div class="num">${s.exams_in_progress}</div><div class="lbl">กำลังทำข้อสอบ</div></div>
+      <div class="stat"><div class="num">${s.avg_percent == null ? "-" : s.avg_percent.toFixed(1) + "%"}</div><div class="lbl">คะแนนเฉลี่ยรวม</div></div>
+      <div class="stat"><div class="num">${s.pass_count}</div><div class="lbl">จำนวนครั้งที่ผ่านเกณฑ์</div></div></div>
+      <div class="card" style="margin-top:20px"><h2>คะแนนเฉลี่ยรายวิชา</h2>${s.subjects.length ? s.subjects.map(x => `
+        <div class="bar-row"><span>${x.id}. ${esc(x.name)}</span><div class="bar"><div style="width:${x.percent}%"></div></div><strong>${x.percent.toFixed(1)}%</strong></div>`).join("")
+        : '<div class="empty">ยังไม่มีข้อมูลการสอบ</div>'}</div>`;
+  }
+
+  /* ---------- ผู้ใช้ ---------- */
+  async function loadUsers() {
+    users = (await api("/api/admin/users")).users;
+    $("users-box").innerHTML = `<div class="table-wrap"><table><thead><tr><th>สถานะ</th><th>ชื่อผู้ใช้</th><th>ชื่อ-สกุล</th><th>บทบาท</th>
+      <th>สอบแล้ว</th><th>คะแนนสูงสุด</th><th>บัญชี</th><th>จัดการ</th></tr></thead><tbody>` +
+      users.map(u => `<tr>
+        <td><span class="dot ${u.online ? "on" : ""}"></span>${u.online ? "ออนไลน์" : "ออฟไลน์"}</td>
+        <td><strong>${esc(u.username)}</strong></td><td>${esc(u.display_name)}</td>
+        <td>${u.role === "admin" ? '<span class="badge warn">แอดมิน</span>' : '<span class="badge gray">ผู้ใช้</span>'}</td>
+        <td>${u.exams_done}</td><td>${fmtPct(u.best_percent)}</td>
+        <td>${u.active ? '<span class="badge ok">ใช้งาน</span>' : '<span class="badge bad">ระงับ</span>'}</td>
+        <td><div class="row" style="gap:6px">
+          <button class="btn sm secondary" data-a="results" data-id="${u.id}">ผลสอบ</button>
+          <button class="btn sm secondary" data-a="edit" data-id="${u.id}">แก้ไข</button>
+          <button class="btn sm secondary" data-a="pw" data-id="${u.id}">รีเซ็ตรหัส</button>
+          ${u.online ? `<button class="btn sm ghost" data-a="kick" data-id="${u.id}">บังคับออก</button>` : ""}
+        </div></td></tr>`).join("") + "</tbody></table></div>";
+    $("users-box").querySelectorAll("button[data-a]").forEach(b => b.onclick = () => userAction(b.dataset.a, +b.dataset.id));
+  }
+
+  async function userAction(a, id) {
+    const u = users.find(x => x.id === id);
+    try {
+      if (a === "results") { $("f-user").value = id; showTab("exams"); }
+      else if (a === "kick") {
+        if (await confirmBox("บังคับออกจากระบบ", `ให้ "${u.username}" ออกจากระบบทันที?`, "บังคับออก", true)) {
+          await api(`/api/admin/users/${id}/force-logout`, { method: "POST" }); toast("บังคับออกจากระบบแล้ว", "success"); loadUsers();
+        }
+      } else if (a === "pw") userForm(u, "pw");
+      else if (a === "edit") userForm(u, "edit");
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  function userForm(u, mode) {
+    const isNew = !u, isPw = mode === "pw";
+    const m = openModal(`<h2>${isNew ? "เพิ่มผู้ใช้ใหม่" : isPw ? "รีเซ็ตรหัสผ่าน: " + esc(u.username) : "แก้ไขผู้ใช้: " + esc(u.username)}</h2><div id="uf-err"></div>
+      ${isNew ? '<div class="field"><label>ชื่อผู้ใช้ (อังกฤษ/ตัวเลข 3-30 ตัว)</label><input id="uf-username" autocomplete="off"></div>' : ""}
+      ${!isPw ? `<div class="field"><label>ชื่อ-สกุล</label><input id="uf-name" value="${esc(u ? u.display_name : "")}"></div>` : ""}
+      ${isNew || isPw ? '<div class="field"><label>รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label><input id="uf-pw" type="text" autocomplete="off"></div>' : ""}
+      ${!isPw ? `<div class="field"><label>บทบาท</label><select id="uf-role"><option value="user">ผู้ใช้ (ผู้เข้าสอบ)</option><option value="admin">แอดมิน</option></select></div>` : ""}
+      ${!isNew && !isPw ? `<div class="field"><label>สถานะบัญชี</label><select id="uf-active"><option value="1">ใช้งาน</option><option value="0">ระงับการใช้งาน</option></select></div>` : ""}
+      <div class="modal-actions"><button class="btn ghost" id="uf-cancel">ยกเลิก</button><button class="btn" id="uf-ok">บันทึก</button></div>`);
+    if (u && !isPw) { m.querySelector("#uf-role").value = u.role; const a = m.querySelector("#uf-active"); if (a) a.value = u.active ? "1" : "0"; }
+    m.querySelector("#uf-cancel").onclick = () => m.remove();
+    m.querySelector("#uf-ok").onclick = async () => {
+      const v = id => { const el = m.querySelector(id); return el ? el.value : undefined; };
+      try {
+        if (isNew) await api("/api/admin/users", { method: "POST", body: { username: v("#uf-username"), display_name: v("#uf-name"), password: v("#uf-pw"), role: v("#uf-role") } });
+        else if (isPw) await api(`/api/admin/users/${u.id}`, { method: "PATCH", body: { password: v("#uf-pw") } });
+        else await api(`/api/admin/users/${u.id}`, { method: "PATCH", body: { display_name: v("#uf-name"), role: v("#uf-role"), active: v("#uf-active") === "1" } });
+        m.remove(); toast("บันทึกเรียบร้อย", "success"); loadUsers();
+      } catch (e) { m.querySelector("#uf-err").innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+    };
+  }
+  $("btn-add").onclick = () => userForm(null, "new");
+
+  /* ---------- ผลสอบ ---------- */
+  async function loadExams() {
+    if (!users.length) users = (await api("/api/admin/users")).users;
+    const sel = $("f-user"), keep = sel.value;
+    sel.innerHTML = '<option value="">ผู้ใช้ทั้งหมด</option>' + users.map(u => `<option value="${u.id}">${esc(u.username)} — ${esc(u.display_name)}</option>`).join("");
+    sel.value = keep;
+    const q = sel.value ? "?user_id=" + sel.value : "";
+    const ex = (await api("/api/admin/exams" + q)).exams;
+    $("exams-box").innerHTML = ex.length ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>ผู้ใช้</th><th>เริ่มสอบ</th><th>ส่งเมื่อ</th><th>คะแนน</th><th>ร้อยละ</th><th>ผล</th><th></th></tr></thead><tbody>` +
+      ex.map(e => `<tr><td>${e.id}</td><td><strong>${esc(e.username)}</strong><div class="muted" style="font-size:.8rem">${esc(e.display_name)}</div></td>
+        <td>${fmtDate(e.started_at)}</td><td>${fmtDate(e.submitted_at)}</td>
+        <td>${e.status === "submitted" ? e.score + "/" + e.total : `ตอบแล้ว ${e.answered}/${e.total}`}</td><td>${fmtPct(e.percent)}</td>
+        <td>${e.status !== "submitted" ? '<span class="badge warn">กำลังทำ</span>' : e.passed ? '<span class="badge ok">ผ่าน</span>' : '<span class="badge bad">ไม่ผ่าน</span>'}</td>
+        <td><div class="row" style="gap:6px"><a class="btn sm secondary" href="/result.html?id=${e.id}">${e.status === "submitted" ? "ดูรายละเอียด" : "ดูความคืบหน้า"}</a>
+          <button class="btn sm ghost" data-del="${e.id}">ลบ</button></div></td></tr>`).join("") + "</tbody></table></div>"
+      : '<div class="empty">ยังไม่มีข้อมูลการสอบ</div>';
+    $("exams-box").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+      if (!await confirmBox("ลบรายการสอบ?", "การลบไม่สามารถกู้คืนได้", "ลบ", true)) return;
+      try { await api("/api/admin/exams/" + b.dataset.del, { method: "DELETE" }); toast("ลบแล้ว", "success"); loadExams(); }
+      catch (e) { toast(e.message, "error"); }
+    });
+  }
+  $("f-user").onchange = loadExams;
+
+  setInterval(() => { if (!$("t-users").classList.contains("hidden") && !document.querySelector(".modal-back")) loadUsers().catch(() => {}); }, 20000);
+  const h = location.hash.slice(1);
+  showTab(["dash", "users", "exams"].includes(h) ? h : "dash");
+})().catch(e => { if (e.status !== 401) console.error(e); });
+</script>
+</body>
+</html>
