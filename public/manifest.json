@@ -1,0 +1,17 @@
+{
+  "name": "ระบบฝึกข้อสอบการพยาบาล",
+  "short_name": "สอบพยาบาล",
+  "description": "ระบบฝึกวิเคราะห์ข้อสอบสถานการณ์ทางการพยาบาล 9 วิชา 1,080 ข้อ",
+  "start_url": "/home.html",
+  "display": "standalone",
+  "background_color": "#0b1620",
+  "theme_color": "#0e9f8e",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e9f8e'/><path d='M50 20 v60 M20 50 h60' stroke='white' stroke-width='14' stroke-linecap='round'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

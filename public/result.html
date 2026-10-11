@@ -9,6 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0e9f8e">
 <style>
 .stat-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 14px; }
 .stat-item { background: var(--card-solid); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; text-align: center; }
@@ -148,10 +150,17 @@
 
     <section class="card" style="margin-top:18px">
       <div class="row between" style="margin-bottom:12px">
-        <h2>เฉลยละเอียดและเหตุผลทางการพยาบาล</h2>
-        <span class="muted" style="font-size:.88rem">สามารถกดปุ่ม ⭐ ติดดาวข้อที่สนใจเพื่อเก็บไว้ทบทวนได้ทันที</span>
+        <div>
+          <h2 style="margin:0 0 4px 0">เฉลยละเอียดและเหตุผลทางการพยาบาล</h2>
+          <div class="muted" style="font-size:.88rem">วิเคราะห์กระบวนการพยาบาล หลักคิดทางคลินิก และข้อลวงของแต่ละตัวเลือก</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn secondary sm" onclick="openLabDrawer()" style="gap:5px">
+            <span>📋</span> ตารางค่าแล็บปกติ
+          </button>
+        </div>
       </div>
-      <div class="tabs" id="tabs"></div>
+      <div class="review-filter-tabs" id="tabs"></div>
       <div id="review" style="margin-top:16px"></div>
     </section>`;
 
@@ -181,18 +190,23 @@
     };
   }
 
-  /* ---------- แท็บและรายการเฉลย ---------- */
+  /* ---------- แท็บและรายการเฉลย (พร้อมตัวกรองข้อผิด/ติดดาว/ปักธง) ---------- */
   let filter = "all";
+  const starredTotal = r.items.filter(i => i.starred).length;
+  const flaggedTotal = r.items.filter(i => i.flagged).length;
+
   const tabs = [
     ["all", `ทั้งหมด (${total})`],
-    ["wrong", `ข้อที่ผิด (${wrongCount + unCount})`],
-    ["right", `ข้อที่ถูก (${correctCount})`]
+    ["wrong", `❌ ตอบผิด (${wrongCount})`],
+    ["starred", `⭐ ติดดาว (${starredTotal})`],
+    ["flagged", `🚩 ปักธง (${flaggedTotal})`],
+    ["right", `✔ ตอบถูก (${correctCount})`]
   ];
 
   function renderTabs() {
     const t = document.getElementById("tabs");
-    t.innerHTML = tabs.map(([k, l]) => `<button class="tab ${k === filter ? "active" : ""}" data-k="${k}">${esc(l)}</button>`).join("");
-    t.querySelectorAll(".tab").forEach(b => b.onclick = () => { filter = b.dataset.k; renderTabs(); renderReview(); });
+    t.innerHTML = tabs.map(([k, l]) => `<button class="review-filter-btn ${k === filter ? "active" : ""}" data-k="${k}">${esc(l)}</button>`).join("");
+    t.querySelectorAll(".review-filter-btn").forEach(b => b.onclick = () => { filter = b.dataset.k; renderTabs(); renderReview(); });
   }
 
   window.toggleStar = async (qid, btn) => {
@@ -200,6 +214,8 @@
     const nextStarred = !isStarred;
     try {
       await api("/api/star", { method: "POST", body: { q_id: qid, starred: nextStarred } });
+      const itObj = r.items.find(x => x.q_id === qid);
+      if (itObj) itObj.starred = nextStarred;
       if (nextStarred) {
         btn.textContent = "★ ติดดาวแล้ว";
         btn.classList.add("btn-star-active");
@@ -209,32 +225,55 @@
         btn.classList.remove("btn-star-active");
         toast("นำดาวออกจากข้อสอบแล้ว", "info");
       }
+      // อัปเดตตัวเลขในแท็บ
+      const sTab = tabs.find(t => t[0] === "starred");
+      if (sTab) {
+        sTab[1] = `⭐ ติดดาว (${r.items.filter(i => i.starred).length})`;
+        renderTabs();
+      }
     } catch(e) { toast(e.message, "error"); }
   };
 
   function renderReview() {
-    const list = r.items.filter(i => filter === "all" || (filter === "wrong" && !i.is_correct) || (filter === "right" && i.is_correct));
+    const list = r.items.filter(i => {
+      if (filter === "all") return true;
+      if (filter === "wrong") return !i.is_correct;
+      if (filter === "starred") return !!i.starred;
+      if (filter === "flagged") return !!i.flagged;
+      if (filter === "right") return !!i.is_correct;
+      return true;
+    });
+
     document.getElementById("review").innerHTML = list.length ? list.map(it => `
-      <article id="q-review-${it.pos}" class="review-item ${it.is_correct ? "is-ok" : "is-bad"}" style="margin-bottom:18px;scroll-margin-top:20px">
+      <article id="q-review-${it.pos}" class="review-item ${it.is_correct ? "is-ok" : "is-bad"}" style="margin-bottom:20px;scroll-margin-top:20px">
         <div class="row between" style="margin-bottom:8px">
           <span class="q-subject" style="font-weight:600">วิชาที่ ${it.subject_id}: ${esc(it.subject)}</span>
           <div style="display:flex;gap:8px;align-items:center">
+            ${it.flagged ? '<span class="badge warn" style="font-size:.78rem">🚩 ปักธงไว้</span>' : ""}
             <button class="btn ghost sm ${it.starred ? "btn-star-active" : ""}" onclick="toggleStar('${it.q_id}', this)" style="padding:4px 10px;font-size:.82rem">
               ${it.starred ? "★ ติดดาวแล้ว" : "☆ ติดดาว"}
             </button>
-            <span class="badge ${it.is_correct ? "ok" : "bad"}">${it.chosen === null ? "ไม่ได้ตอบ" : it.is_correct ? "✔ ถูกต้อง" : "✘ ตอบผิด"}</span>
+            <span class="badge ${it.is_correct ? "ok" : "bad"}">${it.chosen === null ? "ไม่ได้ตอบ" : it.is_correct ? "✔ ตอบถูก" : "✘ ตอบผิด"}</span>
           </div>
         </div>
-        <div class="q-text" style="font-size:1.02rem;line-height:1.6;margin-bottom:12px"><strong>ข้อที่ ${it.pos}.</strong> ${esc(it.q)}</div>
-        <div id="choices">${it.choices.map((c, i) => `<div class="choice review ${i === it.correct ? "correct" : i === it.chosen ? "wrong" : ""}">
-          <span class="key">${KEYS[i]}</span><span>${esc(c)}
-          ${i === it.correct ? ' <strong>✔ (คำตอบที่ถูกต้อง)</strong>' : ""}${i === it.chosen && i !== it.correct ? ' <strong>← คำตอบของคุณ</strong>' : ""}</span>
-        </div>`).join("")}</div>
-        <div class="explain" style="margin-top:12px;padding:12px 14px;border-radius:10px;background:rgba(14, 159, 142, .08);border-left:4px solid var(--primary)">
-          <strong>เฉลย: ข้อ ${KEYS[it.correct]}</strong><br>
-          <div style="margin-top:6px;line-height:1.6">${esc(it.explanation || "ไม่มีคำอธิบาย")}</div>
+        <div class="q-text" style="font-size:1.04rem;line-height:1.65;margin-bottom:14px"><strong>ข้อที่ ${it.pos}.</strong> ${esc(it.q)}</div>
+        <div id="choices" style="display:grid;gap:8px">${it.choices.map((c, i) => `
+          <div class="choice review ${i === it.correct ? "correct" : i === it.chosen ? "wrong" : ""}">
+            <span class="key">${KEYS[i]}</span>
+            <span class="choice-text">${esc(c)}
+              ${i === it.correct ? ' <strong style="color:var(--ok);margin-left:6px">✔ (คำตอบที่ถูกต้อง)</strong>' : ""}
+              ${i === it.chosen && i !== it.correct ? ' <strong style="color:var(--bad);margin-left:6px">← คำตอบที่คุณเลือก</strong>' : ""}
+            </span>
+          </div>`).join("")}
         </div>
-      </article>`).join("") : '<div class="empty">ไม่มีข้อสอบในหมวดนี้</div>';
+        <div class="explain" style="margin-top:14px;padding:16px 18px;border-radius:14px;background:rgba(14, 159, 142, .07);border-left:5px solid var(--primary)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="badge ok" style="font-size:.88rem;padding:4px 12px">เฉลย: ข้อ ${KEYS[it.correct]}</span>
+            <span style="font-weight:700;color:var(--primary)">คำอธิบายและหลักคิดทางการพยาบาล:</span>
+          </div>
+          <div style="line-height:1.7;color:var(--text)">${esc(it.explanation || "ไม่มีคำอธิบาย")}</div>
+        </div>
+      </article>`).join("") : '<div class="empty" style="padding:40px 20px"><div style="font-size:2.5rem;margin-bottom:8px">🎉</div>ไม่มีข้อสอบในหมวดนี้</div>';
   }
 
   window.jumpToQ = function(pos) {

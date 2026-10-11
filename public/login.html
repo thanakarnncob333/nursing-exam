@@ -11,6 +11,9 @@
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
+<div style="position:fixed;top:16px;right:16px">
+  <button class="btn ghost sm" id="btn-theme" title="สลับโหมดมืด/สว่าง">🌓</button>
+</div>
 <main class="login-wrap">
   <section class="card login-card">
     <div class="login-hero">
@@ -38,6 +41,8 @@
 <script src="/js/common.js"></script>
 <script>
 (async () => {
+  const btnTheme = document.getElementById("btn-theme");
+  if (btnTheme) btnTheme.onclick = toggleTheme;
   const msg = document.getElementById("msg");
   if (new URLSearchParams(location.search).get("expired")) {
     msg.innerHTML = '<div class="alert info">session หมดอายุหรือถูกออกจากระบบ กรุณาเข้าสู่ระบบอีกครั้ง</div>';

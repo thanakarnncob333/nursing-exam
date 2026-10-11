@@ -9,6 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0e9f8e">
 <style>
 /* Mode Cards Grid */
 .modes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
@@ -76,6 +78,29 @@
       <div style="font-size:3.2rem;font-weight:800;color:var(--primary)">1,080</div>
       <div style="font-weight:700;font-size:1.05rem">ข้อสอบในคลัง</div>
       <div class="muted" style="font-size:.82rem;text-align:center;margin-top:4px">120 ข้อ/วิชา (ครบ 9 วิชา)<br>เฉลยและตรวจคะแนนทันที</div>
+    </div>
+  </section>
+
+  <!-- Exam Readiness Index & Streak Card -->
+  <section class="readiness-card" id="readiness-card" style="margin-top:20px">
+    <div style="flex:1;min-width:260px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <span class="streak-chip" id="streak-chip">🔥 กำลังประมวลผลความต่อเนื่อง</span>
+        <span class="badge ok" id="readiness-badge" style="font-size:.84rem">ความพร้อมสอบสภา</span>
+      </div>
+      <h2 style="margin:0 0 6px 0;font-size:1.35rem">ดัชนีความพร้อมสอบสภาการพยาบาล (Readiness Index)</h2>
+      <p class="muted" id="readiness-desc" style="font-size:.88rem;margin:0 0 12px 0">
+        คำนวณแบบถ่วงน้ำหนักจากความแม่นยำรายวิชา อัตราการฝึกแก้ข้อผิดพลาด และความครอบคลุมทั้ง 9 วิชา
+      </p>
+      <div id="readiness-advice" style="font-size:.88rem;color:var(--text);background:var(--card-solid);padding:10px 14px;border-radius:12px;border:1px solid var(--border)">
+        💡 กำลังประมวลผลคำแนะนำ...
+      </div>
+    </div>
+    <div class="readiness-ring" id="readiness-ring" style="background:conic-gradient(var(--primary) 0deg, rgba(120,140,160,.2) 0deg)">
+      <div class="readiness-ring-content">
+        <div class="readiness-score" id="readiness-score" style="color:var(--primary)">-%</div>
+        <div class="muted" style="font-size:.72rem;font-weight:700">READINESS</div>
+      </div>
     </div>
   </section>
 
@@ -238,13 +263,89 @@
     btnStarred.textContent = `ยังไม่มีข้อติดดาว`;
   }
 
-  // อัปเดต Competency Analytics
+  // คำนวณ Streak วันที่ฝึกทำข้อสอบต่อเนื่อง
+  function calcStreak(exams) {
+    const dates = new Set();
+    for (const e of exams) {
+      if (e.status === "submitted" && e.submitted_at) {
+        const d = new Date(e.submitted_at * 1000);
+        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        dates.add(dateKey);
+      }
+    }
+    if (!dates.size) return 0;
+    const now = new Date();
+    let curD = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const formatDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    
+    let streak = 0;
+    let checkDate = new Date(curD);
+    if (!dates.has(formatDate(checkDate))) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    while (dates.has(formatDate(checkDate))) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    return streak;
+  }
+
+  const streak = calcStreak(historyList);
+  const streakEl = document.getElementById("streak-chip");
+  if (streakEl) {
+    streakEl.textContent = streak > 0 ? `🔥 ฝึกต่อเนื่อง ${streak} วัน` : `🎯 เริ่มต้นสะสมความต่อเนื่องวันนี้`;
+  }
+
+  // อัปเดต Competency Analytics & Readiness Index
   if (compData && compData.overall) {
     const ov = compData.overall;
     document.getElementById("stat-completed").textContent = ov.exams_completed;
     document.getElementById("stat-accuracy").textContent = `${ov.overall_accuracy}%`;
     document.getElementById("stat-passed").textContent = `${ov.exams_passed} ชุด`;
     document.getElementById("stat-active-mistakes").textContent = `${ov.total_unmastered_mistakes} ข้อ`;
+
+    // คำนวณ Readiness Index
+    const attemptedSubs = compData.subjects ? compData.subjects.filter(s => s.attempted > 0).length : 0;
+    const coveragePct = (attemptedSubs / 9) * 100;
+    const rawScore = ov.exams_completed > 0 ? (ov.overall_accuracy * 0.7) + (coveragePct * 0.3) : 0;
+    const readinessScore = Math.min(100, Math.max(0, Math.round(rawScore)));
+
+    const scoreEl = document.getElementById("readiness-score");
+    const ringEl = document.getElementById("readiness-ring");
+    const badgeEl = document.getElementById("readiness-badge");
+    const adviceEl = document.getElementById("readiness-advice");
+
+    let rColor = "var(--warn)";
+    let rText = "ระดับเริ่มต้น";
+    let advice = "💡 เริ่มต้นฝึกทำข้อสอบรายวิชาและจำลองสอบเพื่อเพิ่มความเชี่ยวชาญ";
+
+    if (readinessScore >= 80) {
+      rColor = "var(--ok)";
+      rText = "ระดับพร้อมสอบสูงมาก";
+      if (badgeEl) badgeEl.className = "badge ok";
+      advice = "🌟 <strong>ยอดเยี่ยมมาก!</strong> คะแนนความแม่นยำและความครอบคลุมอยู่ในเกณฑ์สูง แนะนำฝึกจำลองสอบ 50 ข้อเพื่อรักษาจังหวะเวลา";
+    } else if (readinessScore >= 65) {
+      rColor = "var(--primary)";
+      rText = "ระดับพร้อมสอบ";
+      if (badgeEl) badgeEl.className = "badge ok";
+      advice = `👍 <strong>ความพร้อมดี</strong> ครอบคลุมแล้ว ${attemptedSubs}/9 วิชา แนะนำฝึกวิชาที่ยังไม่ผ่านเกณฑ์ 70% และเคลียร์คลังข้อผิดพลาด`;
+    } else if (readinessScore > 0) {
+      rColor = "var(--warn)";
+      rText = "กำลังเตรียมความพร้อม";
+      if (badgeEl) badgeEl.className = "badge warn";
+      advice = `📚 <strong>ทำไปแล้ว ${attemptedSubs}/9 วิชา</strong> แนะนำฝึกฝนให้ครบทุกวิชาเพื่อเพิ่มความครอบคลุมเนื้อหาข้อสอบสภา`;
+    }
+
+    if (scoreEl) {
+      scoreEl.textContent = `${readinessScore}%`;
+      scoreEl.style.color = rColor;
+    }
+    if (ringEl) {
+      const deg = readinessScore * 3.6;
+      ringEl.style.background = `conic-gradient(${rColor} ${deg}deg, rgba(120, 140, 160, .2) 0deg)`;
+    }
+    if (badgeEl) badgeEl.textContent = rText;
+    if (adviceEl) adviceEl.innerHTML = advice;
 
     const compList = document.getElementById("competency-list");
     compList.innerHTML = compData.subjects.map(s => {
