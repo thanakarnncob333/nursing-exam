@@ -73,6 +73,13 @@ function confirmBox(title, message, okText = "ยืนยัน", danger = fals
     m.querySelector("#c-yes").onclick = () => { m.remove(); resolve(true); };
   });
 }
+function alertBox(title, message, okText = "ตกลง") {
+  return new Promise(resolve => {
+    const m = openModal(`<h2>${esc(title)}</h2><div style="white-space:pre-line;line-height:1.6">${esc(message)}</div>
+      <div class="modal-actions"><button class="btn" id="a-ok" style="min-width:100px">${esc(okText)}</button></div>`);
+    m.querySelector("#a-ok").onclick = () => { m.remove(); resolve(true); };
+  });
+}
 
 /* ---- เปลี่ยนรหัสผ่าน ---- */
 function changePasswordModal(forced = false) {

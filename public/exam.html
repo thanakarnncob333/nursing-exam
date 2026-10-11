@@ -94,9 +94,23 @@
   }
 
   /* ---------- แสดงผลข้อสอบทีละข้อ (Mobile-first ไร้แผงเลขข้อยาวๆ) ---------- */
+  function updateProgressSummary() {
+    const answered = items.filter(i => i.chosen !== null).length;
+    const un = items.length - answered;
+    const pEl = $("progress-text");
+    if (pEl) pEl.textContent = un === 0 ? `(ตอบครบแล้ว ${answered}/${items.length})` : `(ตอบแล้ว ${answered}/${items.length})`;
+    const sBtn = $("btn-submit");
+    if (sBtn) {
+      sBtn.textContent = un === 0 ? "✔ ส่งข้อสอบ & ดูเฉลยทันที" : `ส่งข้อสอบ & ดูเฉลย (เหลือ ${un} ข้อ)`;
+    }
+  }
+
   function renderQuestion() {
     const it = items[cur];
     const isLast = cur === items.length - 1;
+    const answeredCount = items.filter(i => i.chosen !== null).length;
+    const unCount = items.length - answeredCount;
+
     $("q-card").innerHTML = `
       <div class="q-header">
         <span class="q-sub-badge">วิชาที่ ${it.subject_id}: ${esc(it.subject)}</span>
@@ -106,7 +120,12 @@
         </div>
       </div>
       <div class="q-status-line">
-        <strong>ข้อที่ ${cur + 1} / ${items.length}</strong>
+        <div>
+          <strong>ข้อที่ ${cur + 1} / ${items.length}</strong>
+          <span id="progress-text" style="font-size:.84rem;color:var(--muted);margin-left:6px">
+            ${unCount === 0 ? `(ตอบครบแล้ว ${answeredCount}/${items.length})` : `(ตอบแล้ว ${answeredCount}/${items.length})`}
+          </span>
+        </div>
         <button class="btn ghost sm" id="btn-flag">${it.flagged ? "★ ทำเครื่องหมายไว้แล้ว" : "☆ ทำเครื่องหมายทบทวน"}</button>
       </div>
       <div class="q-text" style="font-size:1.06rem;line-height:1.65;margin:14px 0">${esc(it.q)}</div>
@@ -122,7 +141,7 @@
           <button class="btn" id="btn-next" ${isLast ? "disabled" : ""}>ข้อถัดไป →</button>
         </div>
         <button class="btn btn-submit-main" id="btn-submit">
-          ${isLast ? "✔ ส่งข้อสอบ & ดูเฉลยทันที" : "ส่งข้อสอบ & ดูเฉลยวิชานี้"}
+          ${unCount === 0 ? "✔ ส่งข้อสอบ & ดูเฉลยทันที" : `ส่งข้อสอบ & ดูเฉลย (เหลือ ${unCount} ข้อ)`}
         </button>
       </div>`;
 
@@ -157,6 +176,7 @@
     }
     const btnClear = $("btn-clear");
     if (btnClear) btnClear.disabled = (i === null);
+    updateProgressSummary();
   }
 
   document.addEventListener("keydown", e => {
@@ -166,16 +186,26 @@
     else if (/^[1-4]$/.test(e.key)) { if (items[cur].choices[+e.key - 1] !== undefined) choose(+e.key - 1); }
   });
 
-  /* ---------- ส่งข้อสอบ & ตรวจเฉลยทันที ---------- */
+  /* ---------- ส่งข้อสอบ & ตรวจเฉลยทันที (ป้องกันการโกง: ต้องตอบครบทุกข้อ) ---------- */
   async function submitExam() {
     await flush();
     if (pending.size) { toast("ยังบันทึกคำตอบไม่ครบ กรุณารอสักครู่แล้วลองใหม่", "error"); return; }
     const un = items.filter(i => i.chosen === null).length;
+    if (un > 0) {
+      const firstUn = items.findIndex(i => i.chosen === null);
+      await alertBox(
+        "⚠️ ยังทำข้อสอบไม่ครบทุกข้อ",
+        `คุณตอบไปแล้ว ${items.length - un} จากทั้งหมด ${items.length} ข้อ\n(ยังเหลืออีก ${un} ข้อที่ยังไม่ได้ตอบ)\n\nระบบไม่อนุญาตให้ส่งข้อสอบก่อนตอบครบทุกข้อ เพื่อป้องกันการเปิดดูเฉลยก่อนทำเสร็จ\n\n(กดปุ่มด้านล่างเพื่อไปยังข้อที่ ${firstUn + 1} ทันที)`,
+        `ไปทำข้อที่ ${firstUn + 1}`
+      );
+      go(firstUn);
+      return;
+    }
+
     const flagged = items.filter(i => i.flagged).length;
-    let msg = `ตอบแล้ว ${items.length - un} จาก ${items.length} ข้อ`;
-    if (un > 0) msg += `\n\n⚠ ยังไม่ได้ตอบ ${un} ข้อ (ข้อที่ไม่ตอบจะนับเป็นผิด)`;
-    if (flagged > 0) msg += `\n★ มี ${flagged} ข้อที่ทำเครื่องหมายไว้`;
-    msg += "\n\nเมื่อส่งแล้วระบบจะตรวจคะแนนและแสดงเฉลยละเอียดทันที";
+    let msg = `คุณตอบครบทั้ง ${items.length} ข้อเรียบร้อยแล้ว`;
+    if (flagged > 0) msg += `\n★ มี ${flagged} ข้อที่ทำเครื่องหมายทบทวนไว้`;
+    msg += "\n\nเมื่อส่งแล้วระบบจะตรวจคะแนนและแสดงเฉลยละเอียดพร้อมเหตุผลทันที";
     if (!await confirmBox("ยืนยันส่งข้อสอบวิชานี้?", msg, "ส่งข้อสอบ & ดูเฉลย")) return;
     const btn = $("btn-submit");
     if (btn) btn.disabled = true;

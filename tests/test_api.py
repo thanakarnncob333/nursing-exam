@@ -103,12 +103,22 @@ class TestNursingExamApp(unittest.TestCase):
             self.assertNotIn("e", item, "Explanation must not be leaked")
             self.assertEqual(len(item["choices"]), 4, "Must have 4 choices")
 
-        # Answer questions (e.g. first 5 questions)
+        # Answer only first 5 questions (incomplete)
         for pos in range(1, 6):
             res = student.post("/api/exam/answer", json={"exam_id": exam_id, "pos": pos, "chosen": 0})
             self.assertEqual(res.status_code, 200)
 
-        # Submit exam -> returns {ok: True, exam_id: exam_id}
+        # Anti-cheating: Submitting incomplete exam MUST return 400 Bad Request
+        res = student.post("/api/exam/submit", json={"exam_id": exam_id})
+        self.assertEqual(res.status_code, 400, "Must block submit when questions are unanswered")
+        self.assertIn("ไม่ครบ", res.get_json()["error"])
+
+        # Complete the remaining questions (6 to 20)
+        for pos in range(6, 21):
+            res = student.post("/api/exam/answer", json={"exam_id": exam_id, "pos": pos, "chosen": 1})
+            self.assertEqual(res.status_code, 200)
+
+        # Now submit exam -> returns {ok: True, exam_id: exam_id}
         res = student.post("/api/exam/submit", json={"exam_id": exam_id})
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()["ok"])

@@ -516,6 +516,10 @@ def api_exam_submit():
         return e
     con = db()
     rows = con.execute("SELECT * FROM exam_items WHERE exam_id=?", (exam["id"],)).fetchall()
+    unanswered = [r for r in rows if r["chosen"] is None]
+    if unanswered:
+        return err(f"ยังทำข้อสอบไม่ครบทุกข้อ (เหลืออีก {len(unanswered)} ข้อ จากทั้งหมด {len(rows)} ข้อ) "
+                   "ระบบไม่อนุญาตให้ส่งข้อสอบก่อนตอบครบทุกข้อ เพื่อป้องกันการดูเฉลยก่อนเวลา", 400)
     per_subject = {}
     score = 0
     for r in rows:
