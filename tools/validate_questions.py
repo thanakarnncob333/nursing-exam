@@ -71,8 +71,8 @@ for sid in sorted(subjects):
     longest = sum(1 for q in qs if len(q["c"][q["a"]]) == max(len(c) for c in q["c"]))
     print(f"วิชา {sid}: {names[sid]}\n   จำนวน {len(qs)} ข้อ | เฉลย ก/ข/ค/ง = "
           f"{dist[0]}/{dist[1]}/{dist[2]}/{dist[3]} | คำตอบถูกเป็นข้อที่ยาวที่สุด {longest*100//max(len(qs),1)}%")
-    if len(qs) != EXPECT:
-        errors.append(f"วิชา {sid}: มี {len(qs)} ข้อ (ต้องการ {EXPECT})")
+    if len(qs) < EXPECT:
+        errors.append(f"วิชา {sid}: มี {len(qs)} ข้อ (ต้องการอย่างน้อย {EXPECT})")
     mx = max(dist.values()) / max(len(qs), 1)
     if mx > 0.4:
         warnings.append(f"วิชา {sid}: เฉลยกระจุกที่ตัวเลือกเดียว {mx*100:.0f}%")

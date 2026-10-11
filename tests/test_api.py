@@ -28,10 +28,10 @@ class TestNursingExamApp(unittest.TestCase):
 
     def test_01_question_bank_loaded(self):
         self.assertEqual(len(SUBJECTS), 9, "Must have exactly 9 subjects")
-        self.assertEqual(len(QUESTIONS), 900, "Must have exactly 900 questions")
+        self.assertGreaterEqual(len(QUESTIONS), 1080, "Must have at least 1080 questions")
         for sid in range(1, 10):
             self.assertIn(sid, SUBJECTS)
-            self.assertEqual(len(SUBJECTS[sid]["ids"]), 100, f"Subject {sid} must have 100 questions")
+            self.assertGreaterEqual(len(SUBJECTS[sid]["ids"]), 120, f"Subject {sid} must have at least 120 questions")
 
     def test_02_admin_login_and_logout(self):
         client = app.test_client()
@@ -168,5 +168,53 @@ class TestNursingExamApp(unittest.TestCase):
 
         admin.post("/api/logout")
 
+    def test_06_starring_and_competency_analytics(self):
+        student = app.test_client()
+        student.post("/api/login", json={"username": "nurse_student1", "password": "password123"})
+
+        # Star a question
+        first_qid = list(QUESTIONS.keys())[0]
+        res = student.post("/api/star", json={"q_id": first_qid, "starred": True})
+        self.assertEqual(res.status_code, 200)
+
+        # Get starred list
+        res = student.get("/api/starred")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["starred"][0]["q_id"], first_qid)
+
+        # Competency analytics
+        res = student.get("/api/analytics/competency")
+        self.assertEqual(res.status_code, 200)
+        analytics = res.get_json()
+        self.assertIn("overall", analytics)
+        self.assertIn("subjects", analytics)
+        self.assertEqual(len(analytics["subjects"]), 9)
+
+        # Mistakes stats
+        res = student.get("/api/mistakes/stats")
+        self.assertEqual(res.status_code, 200)
+
+        student.post("/api/logout")
+
+    def test_07_timed_mock_exam(self):
+        student = app.test_client()
+        student.post("/api/login", json={"username": "nurse_student1", "password": "password123"})
+
+        # Start timed mock exam (50 questions, 3600 seconds)
+        res = student.post("/api/exam/start", json={"mode": "timed_mock", "force": True})
+        self.assertEqual(res.status_code, 200)
+        exam = res.get_json()["exam"]
+        self.assertEqual(exam["mode"], "timed_mock")
+        self.assertEqual(exam["total"], 50)
+        self.assertEqual(exam["time_limit"], 3600)
+        self.assertGreater(exam["time_remaining"], 0)
+
+        # Clean up exam
+        student.post("/api/exam/abandon", json={"exam_id": exam["id"]})
+        student.post("/api/logout")
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -3,54 +3,164 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>หน้าหลัก | ฝึกทำข้อสอบการพยาบาล</title>
-<meta name="description" content="เริ่มทำข้อสอบการพยาบาล ดูประวัติและผลคะแนนย้อนหลัง">
+<title>หน้าหลัก | ระบบฝึกทำข้อสอบการพยาบาลออนไลน์</title>
+<meta name="description" content="เริ่มทำข้อสอบการพยาบาล จำลองสอบเสมือนจริง คลังข้อผิดพลาด และวิเคราะห์ความเชี่ยวชาญ">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
 <style>
+/* Mode Cards Grid */
+.modes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+.mode-card {
+  background: var(--card-solid); border: 2px solid var(--border); border-radius: 18px;
+  padding: 20px; display: flex; flex-direction: column; justify-content: space-between;
+  gap: 14px; transition: transform .2s, box-shadow .2s, border-color .2s; cursor: pointer;
+  position: relative; overflow: hidden;
+}
+.mode-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--primary); }
+.mode-card.featured { border-color: rgba(14, 159, 142, .6); background: linear-gradient(180deg, rgba(14,159,142,.04) 0%, var(--card-solid) 100%); }
+.mode-icon { font-size: 2rem; line-height: 1; }
+.mode-title { font-weight: 700; font-size: 1.12rem; margin: 6px 0 4px; }
+.mode-desc { font-size: .88rem; color: var(--muted); line-height: 1.5; }
+.mode-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; width: fit-content; }
+
+/* Subject Cards Grid */
 .sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
-.sub-card { background: var(--card-solid); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; transition: transform .18s, box-shadow .2s; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.sub-card {
+  background: var(--card-solid); border: 1px solid var(--border); border-radius: 16px;
+  padding: 18px 20px; transition: transform .18s, box-shadow .2s; display: flex; flex-direction: column;
+  justify-content: space-between; gap: 12px;
+}
 .sub-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: rgba(14, 159, 142, .4); }
 .sub-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.sub-num-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: rgba(14, 159, 142, .14); color: var(--primary); font-weight: 700; font-size: 1rem; flex-shrink: 0; }
+.sub-num-badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border-radius: 10px; background: rgba(14, 159, 142, .14); color: var(--primary); font-weight: 700; font-size: 1rem; flex-shrink: 0;
+}
 .sub-name { font-weight: 600; font-size: 1.02rem; line-height: 1.45; }
 .sub-card-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
 .btn-sub-start { padding: 8px 16px; font-size: .88rem; font-weight: 600; }
+
+/* Competency Section */
+.competency-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.comp-stat-box { background: var(--card-solid); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; text-align: center; }
+.comp-stat-val { font-size: 1.8rem; font-weight: 800; color: var(--primary); }
+.comp-stat-lbl { font-size: .82rem; color: var(--muted); margin-top: 2px; }
+
+.comp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.comp-row:last-child { border-bottom: none; }
+.comp-bar-wrap { flex: 1; min-width: 140px; max-width: 260px; height: 10px; background: rgba(120, 140, 160, .2); border-radius: 999px; overflow: hidden; position: relative; }
+.comp-bar-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
 </style>
 </head>
 <body>
 <main class="container">
+  <!-- Hero Section -->
   <section class="card hero">
     <div>
       <div style="display:inline-block;padding:4px 12px;background:rgba(14,159,142,.12);color:var(--primary);border-radius:999px;font-weight:600;font-size:.85rem;margin-bottom:10px">
-        ⚡ ข้อสอบสถานการณ์ทางคลินิกระดับ 8 · เฉลยทันทีรายวิชา
+        ⚡ คลังข้อสอบสถานการณ์ระดับ 8 · 1,080 ข้อ ครบ 9 วิชา · มีระบบจำลองสอบและคลังข้อผิดพลาด
       </div>
-      <h1 style="margin:0 0 10px 0">พร้อมฝึกวิเคราะห์สถานการณ์ทางการพยาบาลหรือยัง?</h1>
+      <h1 style="margin:0 0 10px 0">ระบบฝึกวิเคราะห์สถานการณ์ทางการพยาบาล</h1>
       <p class="muted" id="hero-desc">
-        ระบบจะสุ่มข้อสอบสถานการณ์จริงวิชาละ 20 ข้อ ส่งตรวจและดูเฉลยละเอียดทันทีเมื่อจบแต่ละวิชา · เกณฑ์ผ่าน 70%
+        ข้อสอบวิเคราะห์สถานการณ์ทางคลินิกเข้มข้น ครอบคลุมการคำนวณยา ABG คลื่นไฟฟ้าหัวใจ ภาวะวิกฤตสูติ-เด็ก จริยธรรม และระบบสุขภาพยุคใหม่
       </p>
       <div id="resume-box"></div>
       <div class="row" style="margin-top:18px;gap:12px;flex-wrap:wrap">
-        <button class="btn lg" id="btn-start">▶ เริ่มทำข้อสอบ (เริ่มจากวิชา 1: ความรู้และทักษะ)</button>
+        <button class="btn lg" id="btn-start">▶ เริ่มฝึกทำข้อสอบ (สุ่มข้อสอบ 20 ข้อ)</button>
+        <button class="btn secondary lg" id="btn-mock-quick">⏱️ จำลองสอบเสมือนจริง 50 ข้อ (60 นาที)</button>
       </div>
-      <p class="muted" style="font-size:.88rem;margin-top:14px">
-        ⏱ ทำทีละวิชา (20 ข้อ) · ไม่จำกัดเวลา · เฉลยละเอียดพร้อมเหตุผลทางคลินิกทันทีหลังส่งวิชานั้น
-      </p>
     </div>
-    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:14px;border-radius:18px;background:rgba(14,159,142,.06);border:1px solid rgba(14,159,142,.18)">
-      <div style="font-size:3rem;font-weight:800;color:var(--primary)">9</div>
-      <div style="font-weight:600;font-size:1.05rem">วิชาการพยาบาล</div>
-      <div class="muted" style="font-size:.85rem;text-align:center;margin-top:4px">วิชาละ 20 ข้อ (รวม 180 ข้อ)<br>เฉลยและตรวจคะแนนทีละวิชา</div>
+    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:16px;border-radius:18px;background:rgba(14,159,142,.06);border:1px solid rgba(14,159,142,.18);min-width:180px">
+      <div style="font-size:3.2rem;font-weight:800;color:var(--primary)">1,080</div>
+      <div style="font-weight:700;font-size:1.05rem">ข้อสอบในคลัง</div>
+      <div class="muted" style="font-size:.82rem;text-align:center;margin-top:4px">120 ข้อ/วิชา (ครบ 9 วิชา)<br>เฉลยและตรวจคะแนนทันที</div>
+    </div>
+  </section>
+
+  <!-- 4 Training Modes -->
+  <section class="card" style="margin-top:20px">
+    <div class="row between">
+      <div>
+        <h2 style="margin:0 0 4px 0">โหมดการฝึกฝน 4 รูปแบบ (Practice Modes)</h2>
+        <div class="muted" style="font-size:.88rem">เลือกรูปแบบการฝึกที่เหมาะกับเป้าหมายการเตรียมสอบของคุณ</div>
+      </div>
+    </div>
+    <div class="modes-grid">
+      <!-- Mode 1: Standard Subject -->
+      <div class="mode-card" onclick="document.getElementById('subjects-section').scrollIntoView({behavior:'smooth'})">
+        <div>
+          <div class="mode-icon">📝</div>
+          <div class="mode-badge" style="background:rgba(14,159,142,.15);color:var(--primary)">แบบฝึกหัดมาตรฐาน</div>
+          <div class="mode-title">ฝึกทำทีละวิชา (20 ข้อ)</div>
+          <div class="mode-desc">สุ่มข้อสอบสถานการณ์ 20 ข้อจากคลัง 120 ข้อ ทำเสร็จแล้วตรวจและดูเฉลยละเอียดทันที</div>
+        </div>
+        <button class="btn secondary sm" style="width:100%">เลือกวิชาที่ต้องการสอบ ↓</button>
+      </div>
+
+      <!-- Mode 2: Timed Mock Exam -->
+      <div class="mode-card featured" onclick="startTimedMock()">
+        <div>
+          <div class="mode-icon">⏱️</div>
+          <div class="mode-badge" style="background:rgba(255,122,89,.15);color:var(--accent)">จำลองสอบจริง · 60 นาที</div>
+          <div class="mode-title">จำลองสอบเสมือนจริง 50 ข้อ</div>
+          <div class="mode-desc">จับเวลาถอยหลัง 60 นาที ข้อสอบคละทุก 9 วิชา เสมือนลงสนามสอบสภาจริงเพื่อฝึกบริหารเวลา</div>
+        </div>
+        <button class="btn sm" style="width:100%;background:linear-gradient(135deg,#ff7a59,#e5533d);color:#fff;border:none">▶ เริ่มจำลองสอบ (50 ข้อ)</button>
+      </div>
+
+      <!-- Mode 3: Mistake Trainer -->
+      <div class="mode-card" id="card-mistakes" onclick="startMistakesMode()">
+        <div>
+          <div class="mode-icon">🎯</div>
+          <div class="mode-badge" id="badge-mistakes" style="background:rgba(229,72,77,.15);color:var(--bad)">คลังข้อผิดพลาด</div>
+          <div class="mode-title">ฝึกแก้ข้อที่เคยตอบผิด</div>
+          <div class="mode-desc" id="desc-mistakes">รวบรวมข้อที่คุณเคยตอบผิดซ้ำๆ จนกว่าจะทำถูกและเข้าใจหลักคิดทางคลินิก</div>
+        </div>
+        <button class="btn secondary sm" id="btn-mistakes-action" style="width:100%">▶ ฝึกแก้ข้อผิดพลาด</button>
+      </div>
+
+      <!-- Mode 4: Starred Questions -->
+      <div class="mode-card" id="card-starred" onclick="startStarredMode()">
+        <div>
+          <div class="mode-icon">⭐</div>
+          <div class="mode-badge" id="badge-starred" style="background:rgba(245,165,36,.18);color:var(--warn)">ข้อสอบติดดาว</div>
+          <div class="mode-title">ทบทวนข้อที่ติดดาวไว้</div>
+          <div class="mode-desc" id="desc-starred">ฝึกทำซ้ำเฉพาะข้อที่คุณกดติดดาวไว้ขณะทำข้อสอบหรือตอนดูเฉลย</div>
+        </div>
+        <button class="btn secondary sm" id="btn-starred-action" style="width:100%">▶ ทบทวนข้อติดดาว</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Competency & Mastery Analytics -->
+  <section class="card" style="margin-top:20px" id="competency-section">
+    <div class="row between" style="margin-bottom:14px">
+      <div>
+        <h2 style="margin:0 0 4px 0">ระดับความเชี่ยวชาญรายวิชา (Competency Matrix)</h2>
+        <div class="muted" style="font-size:.88rem">วิเคราะห์จุดแข็ง-จุดอ่อนเพื่อเตรียมความพร้อมก่อนลงสนามสอบจริง (เกณฑ์ผ่าน 70% · เชี่ยวชาญ ≥ 80%)</div>
+      </div>
+      <div id="analytics-badge-wrap"></div>
+    </div>
+
+    <div class="competency-summary" id="comp-summary">
+      <div class="comp-stat-box"><div class="comp-stat-val" id="stat-completed">-</div><div class="comp-stat-lbl">ชุดข้อสอบที่ส่งแล้ว</div></div>
+      <div class="comp-stat-val-box comp-stat-box"><div class="comp-stat-val" id="stat-accuracy" style="color:var(--primary)">-%</div><div class="comp-stat-lbl">ความแม่นยำเฉลี่ย</div></div>
+      <div class="comp-stat-box"><div class="comp-stat-val" id="stat-passed" style="color:var(--ok)">-</div><div class="comp-stat-lbl">ชุดที่ผ่านเกณฑ์</div></div>
+      <div class="comp-stat-box"><div class="comp-stat-val" id="stat-active-mistakes" style="color:var(--bad)">-</div><div class="comp-stat-lbl">ข้อผิดพลาดที่รอแก้ไข</div></div>
+    </div>
+
+    <div id="competency-list" style="border:1px solid var(--border);border-radius:14px;background:var(--card-solid);overflow:hidden">
+      <div class="empty">กำลังประมวลผลข้อมูลความเชี่ยวชาญ…</div>
     </div>
   </section>
 
   <!-- รายการวิชาทั้ง 9 วิชาให้เลือกสอบได้โดยตรง -->
-  <section class="card" style="margin-top:20px">
+  <section class="card" style="margin-top:20px" id="subjects-section">
     <div class="row between">
       <div>
-        <h2 style="margin:0 0 4px 0">เลือกสอบรายวิชา (วิชาละ 20 ข้อ)</h2>
+        <h2 style="margin:0 0 4px 0">เลือกสอบรายวิชา (วิชาละ 20 ข้อ · สุ่มจาก 120 ข้อ)</h2>
         <div class="muted" style="font-size:.88rem">สามารถเลือกฝึกเฉพาะวิชาที่ต้องการได้ โดยระบบจะสุ่มข้อสอบ 20 ข้อและเฉลยทันทีหลังส่ง</div>
       </div>
     </div>
@@ -59,6 +169,7 @@
     </div>
   </section>
 
+  <!-- ประวัติการสอบ -->
   <section class="card" style="margin-top:20px">
     <h2>ประวัติการสอบของฉัน</h2>
     <div id="history"><div class="empty">กำลังโหลด…</div></div>
@@ -77,6 +188,92 @@
     const h = await api("/api/exams");
     historyList = h.exams || [];
   } catch (e) { console.error(e); }
+
+  // ดึงข้อมูล Competency Analytics
+  let compData = null;
+  try {
+    compData = await api("/api/analytics/competency");
+  } catch (e) { console.error(e); }
+
+  // ดึงข้อมูลข้อผิดพลาด
+  let mistakeStats = null;
+  try {
+    mistakeStats = await api("/api/mistakes/stats");
+  } catch (e) { console.error(e); }
+
+  // ดึงข้อมูลข้อสอบติดดาว
+  let starredStats = null;
+  try {
+    starredStats = await api("/api/starred");
+  } catch (e) { console.error(e); }
+
+  // อัปเดตการแสดงผลในส่วน Mode Cards
+  const totalMistakes = mistakeStats ? mistakeStats.total_mistakes : 0;
+  const badgeMistakes = document.getElementById("badge-mistakes");
+  const descMistakes = document.getElementById("desc-mistakes");
+  const btnMistakes = document.getElementById("btn-mistakes-action");
+  if (totalMistakes > 0) {
+    badgeMistakes.textContent = `🎯 มี ${totalMistakes} ข้อที่รอแก้ไข`;
+    descMistakes.innerHTML = `คุณมีข้อสอบที่เคยตอบผิด <strong>${totalMistakes} ข้อ</strong> ที่ยังไม่ได้ฝึกซ้ำจนถูกต้อง`;
+    btnMistakes.textContent = `▶ ฝึกแก้ข้อผิดพลาด (${totalMistakes} ข้อ)`;
+  } else {
+    badgeMistakes.textContent = `✓ ไม่มีข้อผิดพลาดคั่งค้าง`;
+    descMistakes.textContent = `ยอดเยี่ยม! คุณยังไม่มีข้อสอบที่ตอบผิด หรือได้ฝึกจนตอบถูกครบหมดแล้ว`;
+    btnMistakes.disabled = true;
+    btnMistakes.textContent = `ไม่มีข้อผิดพลาดคั่งค้าง`;
+  }
+
+  const totalStarred = starredStats ? starredStats.count : 0;
+  const badgeStarred = document.getElementById("badge-starred");
+  const descStarred = document.getElementById("desc-starred");
+  const btnStarred = document.getElementById("btn-starred-action");
+  if (totalStarred > 0) {
+    badgeStarred.textContent = `⭐ มี ${totalStarred} ข้อที่ติดดาว`;
+    descStarred.innerHTML = `คุณมีข้อสอบที่บันทึกไว้ <strong>${totalStarred} ข้อ</strong> สามารถกดทบทวนเฉพาะข้อเหล่านี้ได้`;
+    btnStarred.textContent = `▶ ทบทวนข้อติดดาว (${totalStarred} ข้อ)`;
+  } else {
+    badgeStarred.textContent = `⭐ ยังไม่มีข้อติดดาว`;
+    descStarred.textContent = `คุณสามารถกดปุ่ม ⭐ ติดดาวข้อสอบได้ขณะทำข้อสอบหรือตอนดูเฉลยเพื่อเก็บไว้ทบทวน`;
+    btnStarred.disabled = true;
+    btnStarred.textContent = `ยังไม่มีข้อติดดาว`;
+  }
+
+  // อัปเดต Competency Analytics
+  if (compData && compData.overall) {
+    const ov = compData.overall;
+    document.getElementById("stat-completed").textContent = ov.exams_completed;
+    document.getElementById("stat-accuracy").textContent = `${ov.overall_accuracy}%`;
+    document.getElementById("stat-passed").textContent = `${ov.exams_passed} ชุด`;
+    document.getElementById("stat-active-mistakes").textContent = `${ov.total_unmastered_mistakes} ข้อ`;
+
+    const compList = document.getElementById("competency-list");
+    compList.innerHTML = compData.subjects.map(s => {
+      let color = "var(--muted)";
+      let badgeClass = "badge gray";
+      if (s.level === "mastery") { color = "var(--ok)"; badgeClass = "badge ok"; }
+      else if (s.level === "passed") { color = "var(--primary-2)"; badgeClass = "badge info"; }
+      else if (s.level === "needs_focus") { color = "var(--bad)"; badgeClass = "badge bad"; }
+
+      const barWidth = Math.max(0, Math.min(100, s.accuracy));
+      const mistakesNotice = s.active_mistakes > 0 ? `<span style="font-size:.78rem;color:var(--bad);font-weight:600">🎯 ข้อผิดค้าง ${s.active_mistakes}</span>` : "";
+
+      return `
+        <div class="comp-row">
+          <div style="min-width:220px;flex:1">
+            <div style="font-weight:600;font-size:.95rem">วิชา ${s.subject_id}: ${esc(s.subject_name)}</div>
+            <div class="muted" style="font-size:.82rem">ตอบถูก ${s.correct}/${s.attempted} ข้อ · ในคลังมี ${s.total_questions_in_bank} ข้อ ${mistakesNotice}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="comp-bar-wrap">
+              <div class="comp-bar-fill" style="width:${barWidth}%;background:${color}"></div>
+            </div>
+            <span style="font-weight:700;font-size:.92rem;min-width:45px;text-align:right">${s.attempted > 0 ? s.accuracy + "%" : "-"}</span>
+            <span class="${badgeClass}" style="min-width:90px;text-align:center">${esc(s.level_text)}</span>
+            <button class="btn sm secondary" onclick="startSubject(${s.subject_id})">ทดสอบวิชานี้</button>
+          </div>
+        </div>`;
+    }).join("");
+  }
 
   // แผนที่ผลสอบล่าสุดของแต่ละวิชา
   const lastSubScore = {};
@@ -104,7 +301,7 @@
             <div>${badgeHtml}</div>
           </div>
           <div class="sub-name" style="margin-top:10px">${esc(s.name)}</div>
-          <div class="muted" style="font-size:.82rem;margin-top:6px">สถานการณ์ทางคลินิก · 20 ข้อ</div>
+          <div class="muted" style="font-size:.82rem;margin-top:6px">สถานการณ์ทางคลินิก · สุ่ม 20 ข้อ (จากคลัง 120 ข้อ)</div>
         </div>
         <div class="sub-card-bottom">
           <button class="btn btn-sub-start" onclick="startSubject(${s.id})">▶ เริ่มสอบวิชานี้</button>
@@ -112,23 +309,52 @@
       </div>`;
   }).join("");
 
+  // Functions เริ่มทำข้อสอบโหมดต่างๆ
   window.startSubject = async (sid) => {
     try {
-      await api("/api/exam/start", { method: "POST", body: { subject_id: sid } });
+      await api("/api/exam/start", { method: "POST", body: { subject_id: sid, mode: "standard", force: true } });
       location.href = "/exam.html";
     } catch (e) { toast(e.message, "error"); }
   };
+
+  window.startTimedMock = async () => {
+    if (!await confirmBox("เริ่มจำลองสอบเสมือนจริง 50 ข้อ?", "ข้อสอบจะคละครบทุก 9 วิชา และมีการจับเวลาถอยหลัง 60 นาที (1 ชั่วโมง)\nคุณพร้อมทำข้อสอบต่อเนื่องหรือไม่?", "เริ่มทำข้อสอบเสมือนจริง")) return;
+    try {
+      await api("/api/exam/start", { method: "POST", body: { mode: "timed_mock", force: true } });
+      location.href = "/exam.html";
+    } catch (e) { toast(e.message, "error"); }
+  };
+
+  window.startMistakesMode = async () => {
+    try {
+      await api("/api/exam/start", { method: "POST", body: { mode: "mistakes", force: true } });
+      location.href = "/exam.html";
+    } catch (e) { toast(e.message, "error"); }
+  };
+
+  window.startStarredMode = async () => {
+    try {
+      await api("/api/exam/start", { method: "POST", body: { mode: "starred", force: true } });
+      location.href = "/exam.html";
+    } catch (e) { toast(e.message, "error"); }
+  };
+
+  document.getElementById("btn-mock-quick").onclick = window.startTimedMock;
 
   // ตรวจสอบข้อสอบที่ค้างอยู่
   const cur = await api("/api/exam/current");
   const startBtn = document.getElementById("btn-start");
   if (cur.exam) {
     const answered = cur.exam.items.filter(i => i.chosen !== null).length;
-    const subName = cur.exam.subject_name ? ` (วิชา: ${cur.exam.subject_name})` : "";
-    startBtn.textContent = `▶ ทำข้อสอบต่อ${subName}`;
+    let modeLabel = "วิชา " + (cur.exam.subject_name || "");
+    if (cur.exam.mode === "timed_mock") modeLabel = "จำลองสอบเสมือนจริง 50 ข้อ (จับเวลา 60 นาที)";
+    else if (cur.exam.mode === "mistakes") modeLabel = "คลังข้อผิดพลาด";
+    else if (cur.exam.mode === "starred") modeLabel = "คลังข้อสอบติดดาว";
+
+    startBtn.textContent = `▶ ทำข้อสอบต่อ (${modeLabel})`;
     document.getElementById("resume-box").innerHTML = `
       <div class="alert info" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <span>คุณมีข้อสอบที่ทำค้างอยู่${subName} — ทำไปแล้ว ${answered}/${cur.exam.total} ข้อ</span>
+        <span>คุณมีข้อสอบที่ทำค้างอยู่ [${modeLabel}] — ทำไปแล้ว ${answered}/${cur.exam.total} ข้อ</span>
         <button class="btn ghost sm" id="btn-abandon">ยกเลิกชุดนี้</button>
       </div>`;
     document.getElementById("btn-abandon").onclick = async () => {
@@ -141,7 +367,7 @@
   startBtn.onclick = async () => {
     startBtn.disabled = true;
     try {
-      await api("/api/exam/start", { method: "POST", body: { subject_id: 1 } });
+      await api("/api/exam/start", { method: "POST", body: { subject_id: 1, mode: "standard" } });
       location.href = "/exam.html";
     } catch (e) {
       toast(e.message, "error");
@@ -157,7 +383,7 @@
     box.innerHTML = `<div class="table-wrap"><table>
       <thead><tr>
         <th>ครั้งที่</th>
-        <th>วิชาที่สอบ</th>
+        <th>โหมด / วิชาที่สอบ</th>
         <th>เริ่มสอบ</th>
         <th>ส่งเมื่อ</th>
         <th>คะแนน</th>
@@ -167,7 +393,11 @@
       </tr></thead>
       <tbody>` +
       historyList.map((e, i) => {
-        const subTitle = e.subject_name ? (e.subject_id ? `วิชา ${e.subject_id}: ${esc(e.subject_name)}` : esc(e.subject_name)) : "รวมทุกวิชา";
+        let subTitle = e.subject_name ? (e.subject_id ? `วิชา ${e.subject_id}: ${esc(e.subject_name)}` : esc(e.subject_name)) : "รวมทุกวิชา";
+        if (e.mode === "timed_mock") subTitle = "⏱️ จำลองสอบเสมือนจริง (50 ข้อ)";
+        else if (e.mode === "mistakes") subTitle = "🎯 คลังข้อผิดพลาด";
+        else if (e.mode === "starred") subTitle = "⭐ คลังข้อสอบติดดาว";
+
         return `<tr>
           <td>${historyList.length - i}</td>
           <td><strong>${subTitle}</strong></td>

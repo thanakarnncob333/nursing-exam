@@ -16,6 +16,7 @@
 .stat-item .lbl { font-size: .82rem; color: var(--muted); margin-top: 2px; }
 .action-banner { margin-top: 20px; padding: 18px 20px; border-radius: 16px; background: rgba(14, 159, 142, .08); border: 1px solid rgba(14, 159, 142, .25); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
 .btn-next-subject { background: linear-gradient(135deg, #0e9f8e, #0a7b6e); color: #fff; font-weight: 700; padding: 12px 24px; font-size: 1.05rem; }
+.btn-star-active { background: rgba(245, 165, 36, .18) !important; color: #d97706 !important; border-color: rgba(245, 165, 36, .4) !important; font-weight: 700 !important; }
 </style>
 </head>
 <body>
@@ -61,15 +62,30 @@
   const allSubs = me.config.subjects || [];
   const nextSubObj = nextSubId ? allSubs.find(s => s.id === nextSubId) : null;
 
+  let headerTitle = "ผลการสอบรวม";
+  if (r.mode === "timed_mock") headerTitle = "⏱️ ผลการจำลองสอบเสมือนจริง (50 ข้อ)";
+  else if (r.mode === "mistakes") headerTitle = "🎯 ผลการฝึกแก้คลังข้อผิดพลาด";
+  else if (r.mode === "starred") headerTitle = "⭐ ผลการทบทวนข้อสอบติดดาว";
+  else if (isSingleSub) headerTitle = `ผลสอบวิชาที่ ${curSub.id}: ${esc(curSub.name)}`;
+
+  let modeNotice = "";
+  if (r.mode === "mistakes") {
+    modeNotice = `<div class="alert ok" style="margin-top:12px">
+      🎯 <strong>ระบบคลังข้อผิดพลาด:</strong> ข้อที่คุณตอบถูกต้องในชุดนี้ ได้รับการบันทึกว่าเข้าใจแล้ว และถูกนำออกจากคลังข้อผิดพลาดโดยอัตโนมัติ!
+    </div>`;
+  }
+
   root.innerHTML = `
     <section class="card">
       <div class="row between" style="margin-bottom:12px;align-items:flex-start">
         <div>
-          <h1 style="margin:0 0 4px 0">${isSingleSub ? `ผลสอบวิชาที่ ${curSub.id}: ${esc(curSub.name)}` : "ผลการสอบรวม"}</h1>
+          <h1 style="margin:0 0 4px 0">${headerTitle}</h1>
           <div class="muted">${esc(r.owner.display_name)} (${esc(r.owner.username)}) · ส่งเมื่อ ${fmtDate(r.submitted_at)} · ใช้เวลา ${durText}</div>
         </div>
         <a class="btn secondary" href="${backHref}">🏠 กลับหน้าหลัก</a>
       </div>
+
+      ${modeNotice}
 
       <div class="grid cols-2" style="align-items:center;margin-top:14px">
         <div style="text-align:center">
@@ -98,36 +114,34 @@
           <div style="margin-top:16px">
             <div class="row between" style="margin-bottom:8px">
               <span style="font-weight:600;font-size:.9rem">สถานะรายข้อ (คลิกตัวเลขเพื่อดูเฉลย):</span>
-              <span class="muted" style="font-size:.8rem">รวม 20 ข้อ</span>
             </div>
-            <div class="palette" style="grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px;">
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
               ${r.items.map(it => {
-                const cls = it.chosen === null ? "unanswered" : it.is_correct ? "ok" : "no";
-                const mark = it.chosen === null ? "—" : it.is_correct ? "✓" : "✗";
-                return `<button class="pbtn ${cls}" onclick="jumpToQ(${it.pos})" title="ข้อ ${it.pos}: ${it.chosen === null ? "ไม่ได้ตอบ" : it.is_correct ? "ตอบถูก" : "ตอบผิด"}" style="height:38px;font-weight:600;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;border-radius:8px">
-                  <span>${it.pos}</span>
-                  <span style="font-size:.65rem;opacity:.9">${mark}</span>
-                </button>`;
+                const cls = it.chosen === null ? "badge gray" : (it.is_correct ? "badge ok" : "badge bad");
+                return `<a href="#q-review-${it.pos}" onclick="jumpToQ(${it.pos});return false;"
+                  class="${cls}" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:30px;padding:0 6px;text-decoration:none;font-weight:700;cursor:pointer">
+                  ${it.pos}
+                </a>`;
               }).join("")}
-            </div>
-            <div class="row" style="gap:14px;margin-top:10px;font-size:.82rem;color:var(--muted)">
-              <span><strong style="color:var(--ok)">✓</strong> สีเขียว = ตอบถูก</span>
-              <span><strong style="color:var(--bad)">✗</strong> สีแดง = ตอบผิด</span>
-              <span><strong style="color:var(--muted)">—</strong> สีเทา = ยังไม่ได้ทำ</span>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- Action Banner สำหรับนำทางไปทำต่อ -->
       <div class="action-banner">
-        <div style="font-weight:600">
-          ${nextSubObj ? `วิชาถัดไป: <strong>วิชาที่ ${nextSubObj.id}. ${esc(nextSubObj.name)}</strong> (20 ข้อ)` :
-            (isSingleSub && curSubId === 9 ? '🎉 ยอดเยี่ยมมาก! คุณทำแบบทดสอบครบทั้ง 9 วิชาเรียบร้อยแล้ว' : 'คุณสามารถทบทวนเฉลยละเอียดด้านล่างได้เลย')}
+        <div>
+          <div style="font-weight:700;font-size:1.05rem">
+            ${isSingleSub ? (nextSubObj ? `ขั้นตอนต่อไป: ทำข้อสอบวิชาที่ ${nextSubId}` : "คุณทำครบวิชาสุดท้ายแล้ว!") : "เสร็จสิ้นการประเมินชุดนี้แล้ว"}
+          </div>
+          <div class="muted" style="font-size:.88rem">
+            ${isSingleSub && nextSubObj ? `${esc(nextSubObj.name)} (สุ่ม 20 ข้อ)` : "สามารถเลือกฝึกวิชาอื่น จำลองสอบเสมือนจริง หรือกลับหน้าหลักเพื่อดูผลวิเคราะห์ได้"}
+          </div>
         </div>
-        <div class="row" style="gap:10px;flex-wrap:wrap">
-          ${nextSubObj ? `<button class="btn btn-next-subject" id="btn-next-sub">▶ ไปทำวิชาที่ ${nextSubObj.id} ต่อทันที →</button>` : ""}
-          ${isSingleSub ? `<button class="btn secondary" id="btn-retry-sub">↺ ฝึกวิชานี้อีกครั้ง (สุ่มใหม่ 20 ข้อ)</button>` : ""}
-          <a class="btn ghost" href="/home.html">กลับสู่หน้ารายการวิชา</a>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          ${isSingleSub && nextSubObj ? `<button class="btn btn-next-subject" id="btn-next-sub">▶ ไปทำวิชาที่ ${nextSubId} ต่อทันที</button>` : ""}
+          ${isSingleSub ? `<button class="btn secondary" id="btn-retry-sub">↻ สุ่มทำวิชานี้อีกรอบ</button>` : `<button class="btn secondary" onclick="location.href='/home.html'">ทำชุดอื่นต่อ</button>`}
+          <a class="btn ghost" href="/home.html">กลับสู่หน้าหลัก</a>
         </div>
       </div>
     </section>
@@ -135,7 +149,7 @@
     <section class="card" style="margin-top:18px">
       <div class="row between" style="margin-bottom:12px">
         <h2>เฉลยละเอียดและเหตุผลทางการพยาบาล</h2>
-        <span class="muted" style="font-size:.88rem">ตรวจดูข้อที่ถูกและผิดเพื่อทบทวนความรู้</span>
+        <span class="muted" style="font-size:.88rem">สามารถกดปุ่ม ⭐ ติดดาวข้อที่สนใจเพื่อเก็บไว้ทบทวนได้ทันที</span>
       </div>
       <div class="tabs" id="tabs"></div>
       <div id="review" style="margin-top:16px"></div>
@@ -145,7 +159,7 @@
     document.getElementById("btn-next-sub").onclick = async () => {
       document.getElementById("btn-next-sub").disabled = true;
       try {
-        await api("/api/exam/start", { method: "POST", body: { subject_id: nextSubId } });
+        await api("/api/exam/start", { method: "POST", body: { subject_id: nextSubId, force: true } });
         location.href = "/exam.html";
       } catch (e) {
         toast(e.message, "error");
@@ -158,7 +172,7 @@
     document.getElementById("btn-retry-sub").onclick = async () => {
       document.getElementById("btn-retry-sub").disabled = true;
       try {
-        await api("/api/exam/start", { method: "POST", body: { subject_id: curSubId } });
+        await api("/api/exam/start", { method: "POST", body: { subject_id: curSubId, force: true } });
         location.href = "/exam.html";
       } catch (e) {
         toast(e.message, "error");
@@ -181,13 +195,35 @@
     t.querySelectorAll(".tab").forEach(b => b.onclick = () => { filter = b.dataset.k; renderTabs(); renderReview(); });
   }
 
+  window.toggleStar = async (qid, btn) => {
+    const isStarred = btn.textContent.includes("★");
+    const nextStarred = !isStarred;
+    try {
+      await api("/api/star", { method: "POST", body: { q_id: qid, starred: nextStarred } });
+      if (nextStarred) {
+        btn.textContent = "★ ติดดาวแล้ว";
+        btn.classList.add("btn-star-active");
+        toast("⭐ บันทึกข้อสอบไว้ในคลังติดดาวแล้ว", "info");
+      } else {
+        btn.textContent = "☆ ติดดาว";
+        btn.classList.remove("btn-star-active");
+        toast("นำดาวออกจากข้อสอบแล้ว", "info");
+      }
+    } catch(e) { toast(e.message, "error"); }
+  };
+
   function renderReview() {
     const list = r.items.filter(i => filter === "all" || (filter === "wrong" && !i.is_correct) || (filter === "right" && i.is_correct));
     document.getElementById("review").innerHTML = list.length ? list.map(it => `
       <article id="q-review-${it.pos}" class="review-item ${it.is_correct ? "is-ok" : "is-bad"}" style="margin-bottom:18px;scroll-margin-top:20px">
         <div class="row between" style="margin-bottom:8px">
           <span class="q-subject" style="font-weight:600">วิชาที่ ${it.subject_id}: ${esc(it.subject)}</span>
-          <span class="badge ${it.is_correct ? "ok" : "bad"}">${it.chosen === null ? "ไม่ได้ตอบ" : it.is_correct ? "✔ ถูกต้อง" : "✘ ตอบผิด"}</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn ghost sm ${it.starred ? "btn-star-active" : ""}" onclick="toggleStar('${it.q_id}', this)" style="padding:4px 10px;font-size:.82rem">
+              ${it.starred ? "★ ติดดาวแล้ว" : "☆ ติดดาว"}
+            </button>
+            <span class="badge ${it.is_correct ? "ok" : "bad"}">${it.chosen === null ? "ไม่ได้ตอบ" : it.is_correct ? "✔ ถูกต้อง" : "✘ ตอบผิด"}</span>
+          </div>
         </div>
         <div class="q-text" style="font-size:1.02rem;line-height:1.6;margin-bottom:12px"><strong>ข้อที่ ${it.pos}.</strong> ${esc(it.q)}</div>
         <div id="choices">${it.choices.map((c, i) => `<div class="choice review ${i === it.correct ? "correct" : i === it.chosen ? "wrong" : ""}">

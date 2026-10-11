@@ -106,7 +106,9 @@ CREATE TABLE IF NOT EXISTS exams (
     score INTEGER,
     total INTEGER NOT NULL,
     percent REAL,
-    passed INTEGER
+    passed INTEGER,
+    mode TEXT NOT NULL DEFAULT 'standard',
+    time_limit INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_exams_user ON exams(user_id);
 CREATE TABLE IF NOT EXISTS exam_items (
@@ -126,6 +128,13 @@ CREATE TABLE IF NOT EXISTS exam_subject_scores (
     total INTEGER NOT NULL,
     PRIMARY KEY (exam_id, subject_id)
 );
+CREATE TABLE IF NOT EXISTS starred_questions (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    q_id TEXT NOT NULL,
+    starred_at REAL NOT NULL,
+    PRIMARY KEY (user_id, q_id)
+);
+CREATE INDEX IF NOT EXISTS idx_starred_user ON starred_questions(user_id);
 """
 
 
@@ -155,6 +164,15 @@ def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     con = connect()
     con.executescript(SCHEMA)
+    # Safe migrations for existing databases
+    try:
+        con.execute("ALTER TABLE exams ADD COLUMN mode TEXT NOT NULL DEFAULT 'standard'")
+    except Exception:
+        pass
+    try:
+        con.execute("ALTER TABLE exams ADD COLUMN time_limit INTEGER NOT NULL DEFAULT 0")
+    except Exception:
+        pass
     row = con.execute("SELECT COUNT(*) AS n FROM users WHERE role='admin'").fetchone()
     if row["n"] == 0:
         username = os.environ.get("ADMIN_USERNAME", "admin").strip().lower()
@@ -375,36 +393,111 @@ def exam_row(exam_id):
     return db().execute("SELECT * FROM exams WHERE id = ?", (exam_id,)).fetchone()
 
 
-def build_exam(user_id, subject_id=None):
+def get_user_mistakes(user_id):
+    """
+    คืนรายการ q_id ที่ผู้ใช้เคยตอบผิดในครั้งล่าสุดที่ทำ (ยังไม่สามารถตอบถูกได้)
+    และสรุปสถิติตามรายวิชา
+    """
+    con = db()
+    rows = con.execute("""
+        SELECT ei.q_id, ei.subject_id, ei.perm, ei.chosen, e.submitted_at
+        FROM exam_items ei
+        JOIN exams e ON e.id = ei.exam_id
+        WHERE e.user_id = ? AND e.status = 'submitted'
+        ORDER BY e.submitted_at DESC, e.id DESC
+    """, (user_id,)).fetchall()
+
+    seen = {}
+    for r in rows:
+        qid = r["q_id"]
+        if qid in seen:
+            continue
+        q = QUESTIONS.get(qid)
+        if not q:
+            continue
+        perm = json.loads(r["perm"])
+        is_correct = (r["chosen"] is not None and perm[r["chosen"]] == q["a"])
+        seen[qid] = (is_correct, r["subject_id"])
+
+    unmastered = [qid for qid, (is_correct, _) in seen.items() if not is_correct]
+    by_subject = {}
+    for qid in unmastered:
+        sid = seen[qid][1]
+        by_subject[sid] = by_subject.get(sid, 0) + 1
+    return unmastered, by_subject
+
+
+def build_exam(user_id, subject_id=None, mode="standard"):
     con = db()
     picks = []
-    if subject_id == "all":
-        for sid in sorted(SUBJECTS):
+    time_limit = 0
+
+    if mode == "timed_mock":
+        # จำลองสอบเสมือนจริง 50 ข้อ รวมทุกวิชา (จับเวลา 60 นาที = 3600 วิ)
+        time_limit = 3600
+        all_sids = sorted(SUBJECTS.keys())
+        quota = {sid: 5 for sid in all_sids}
+        for sid in all_sids[:5]:
+            quota[sid] += 1
+        for sid in all_sids:
+            ids = SUBJECTS[sid]["ids"]
+            chosen = random.sample(ids, min(quota[sid], len(ids)))
+            picks.extend((sid, qid) for qid in chosen)
+        random.shuffle(picks)
+    elif mode == "mistakes":
+        # โหมดคลังข้อผิดพลาด: สุ่มจากข้อที่ยังตอบไม่ถูก
+        unmastered, _ = get_user_mistakes(user_id)
+        if not unmastered:
+            return None, "คุณยังไม่มีข้อสอบที่เคยตอบผิดในระบบ หรือได้ฝึกจนตอบถูกครบทั้งหมดแล้ว!"
+        if subject_id is not None and str(subject_id).isdigit() and int(subject_id) in SUBJECTS:
+            sid = int(subject_id)
+            unmastered = [qid for qid in unmastered if QUESTIONS[qid]["subject_id"] == sid]
+            if not unmastered:
+                return None, f"ไม่มีข้อสอบที่เคยตอบผิดในวิชา {SUBJECTS[sid]['name']}"
+        chosen_qids = random.sample(unmastered, min(PER_SUBJECT, len(unmastered)))
+        picks = [(QUESTIONS[qid]["subject_id"], qid) for qid in chosen_qids]
+    elif mode == "starred":
+        # โหมดทบทวนข้อที่ติดดาวไว้
+        starred_rows = con.execute("SELECT q_id FROM starred_questions WHERE user_id=?", (user_id,)).fetchall()
+        starred_qids = [r["q_id"] for r in starred_rows if r["q_id"] in QUESTIONS]
+        if not starred_qids:
+            return None, "คุณยังไม่ได้ติดดาว (⭐) ข้อสอบข้อใดไว้เลย สามารถกดติดดาวได้ขณะทำข้อสอบหรือดูเฉลย"
+        if subject_id is not None and str(subject_id).isdigit() and int(subject_id) in SUBJECTS:
+            sid = int(subject_id)
+            starred_qids = [qid for qid in starred_qids if QUESTIONS[qid]["subject_id"] == sid]
+            if not starred_qids:
+                return None, f"ไม่มีข้อสอบที่ติดดาวในวิชา {SUBJECTS[sid]['name']}"
+        chosen_qids = random.sample(starred_qids, min(PER_SUBJECT, len(starred_qids)))
+        picks = [(QUESTIONS[qid]["subject_id"], qid) for qid in chosen_qids]
+    else:
+        # Standard mode
+        mode = "standard"
+        if subject_id == "all":
+            for sid in sorted(SUBJECTS):
+                ids = SUBJECTS[sid]["ids"]
+                chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
+                picks.extend((sid, qid) for qid in chosen)
+        elif subject_id is not None and (isinstance(subject_id, int) or str(subject_id).isdigit()) and int(subject_id) in SUBJECTS:
+            sid = int(subject_id)
             ids = SUBJECTS[sid]["ids"]
             chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
             picks.extend((sid, qid) for qid in chosen)
-    elif subject_id is not None and (isinstance(subject_id, int) or str(subject_id).isdigit()) and int(subject_id) in SUBJECTS:
-        sid = int(subject_id)
-        ids = SUBJECTS[sid]["ids"]
-        chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
-        picks.extend((sid, qid) for qid in chosen)
-    else:
-        # ค่าเริ่มต้น: สุ่มทำทีละวิชา เริ่มจากวิชาที่ 1
-        sid = min(SUBJECTS.keys()) if SUBJECTS else 1
-        ids = SUBJECTS[sid]["ids"]
-        chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
-        picks.extend((sid, qid) for qid in chosen)
+        else:
+            sid = min(SUBJECTS.keys()) if SUBJECTS else 1
+            ids = SUBJECTS[sid]["ids"]
+            chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
+            picks.extend((sid, qid) for qid in chosen)
+
     now = time.time()
     con.execute("BEGIN IMMEDIATE")
     try:
-        # กันกดเริ่มซ้อน: ตรวจอีกครั้งในธุรกรรม
         existing = con.execute(
             "SELECT id FROM exams WHERE user_id=? AND status='in_progress'", (user_id,)).fetchone()
         if existing:
             con.execute("ROLLBACK")
-            return existing["id"]
-        cur = con.execute("INSERT INTO exams (user_id, status, started_at, total) VALUES (?, 'in_progress', ?, ?)",
-                          (user_id, now, len(picks)))
+            return existing["id"], None
+        cur = con.execute("INSERT INTO exams (user_id, status, started_at, total, mode, time_limit) VALUES (?, 'in_progress', ?, ?, ?, ?)",
+                          (user_id, now, len(picks), mode, time_limit))
         exam_id = cur.lastrowid
         rows = []
         for pos, (sid, qid) in enumerate(picks, start=1):
@@ -416,11 +509,14 @@ def build_exam(user_id, subject_id=None):
     except Exception:
         con.execute("ROLLBACK")
         raise
-    return exam_id
+    return exam_id, None
 
 
 def exam_payload(exam):
-    rows = db().execute("SELECT * FROM exam_items WHERE exam_id=? ORDER BY pos", (exam["id"],)).fetchall()
+    con = db()
+    rows = con.execute("SELECT * FROM exam_items WHERE exam_id=? ORDER BY pos", (exam["id"],)).fetchall()
+    user_id = exam["user_id"]
+    starred_set = set(r["q_id"] for r in con.execute("SELECT q_id FROM starred_questions WHERE user_id=?", (user_id,)).fetchall())
     items = []
     sids = set()
     for r in rows:
@@ -431,18 +527,26 @@ def exam_payload(exam):
         sids.add(r["subject_id"])
         items.append({
             "pos": r["pos"],
+            "q_id": r["q_id"],
             "subject_id": r["subject_id"],
             "subject": SUBJECTS[r["subject_id"]]["name"] if r["subject_id"] in SUBJECTS else str(r["subject_id"]),
             "q": q["q"],
             "choices": [q["c"][i] for i in perm],  # ไม่ส่งเฉลยไปที่เบราว์เซอร์
             "chosen": r["chosen"],
             "flagged": bool(r["flagged"]),
+            "starred": r["q_id"] in starred_set,
         })
     single_sid = list(sids)[0] if len(sids) == 1 else None
+    mode = exam["mode"] if "mode" in exam.keys() and exam["mode"] else "standard"
+    time_limit = exam["time_limit"] if "time_limit" in exam.keys() and exam["time_limit"] else 0
+    time_remaining = max(0, int(exam["started_at"] + time_limit - time.time())) if time_limit > 0 else 0
     return {
         "id": exam["id"],
         "started_at": exam["started_at"],
         "total": exam["total"],
+        "mode": mode,
+        "time_limit": time_limit,
+        "time_remaining": time_remaining,
         "subject_id": single_sid,
         "subject_name": SUBJECTS[single_sid]["name"] if single_sid and single_sid in SUBJECTS else None,
         "items": items,
@@ -456,10 +560,18 @@ def api_exam_start():
         return err("ยังไม่มีคลังข้อสอบ", 500)
     data = body()
     req_sid = data.get("subject_id")
-    open_exam = db().execute(
+    mode = data.get("mode", "standard")
+    reset = bool(data.get("reset") or data.get("force"))
+    con = db()
+    open_exam = con.execute(
         "SELECT * FROM exams WHERE user_id=? AND status='in_progress'", (g.user["id"],)).fetchone()
+    if open_exam and reset:
+        con.execute("DELETE FROM exams WHERE id=?", (open_exam["id"],))
+        open_exam = None
     if open_exam is None:
-        exam_id = build_exam(g.user["id"], subject_id=req_sid)
+        exam_id, error_msg = build_exam(g.user["id"], subject_id=req_sid, mode=mode)
+        if error_msg:
+            return err(error_msg, 400)
         open_exam = exam_row(exam_id)
     return jsonify({"exam": exam_payload(open_exam)})
 
@@ -565,9 +677,13 @@ def exam_summary(exam):
     subj = db().execute("SELECT * FROM exam_subject_scores WHERE exam_id=? ORDER BY subject_id",
                         (exam["id"],)).fetchall()
     single_sid = subj[0]["subject_id"] if len(subj) == 1 else None
+    mode = exam["mode"] if "mode" in exam.keys() and exam["mode"] else "standard"
+    time_limit = exam["time_limit"] if "time_limit" in exam.keys() and exam["time_limit"] else 0
     return {
         "id": exam["id"],
         "status": exam["status"],
+        "mode": mode,
+        "time_limit": time_limit,
         "started_at": exam["started_at"],
         "submitted_at": exam["submitted_at"],
         "score": exam["score"],
@@ -612,6 +728,8 @@ def api_exam_detail(exam_id):
         result["progress"] = {"answered": sum(1 for r in rows if r["chosen"] is not None), "total": len(rows)}
         result["items"] = []
         return jsonify({"result": result})
+    user_id = exam["user_id"]
+    starred_set = set(r["q_id"] for r in db().execute("SELECT q_id FROM starred_questions WHERE user_id=?", (user_id,)).fetchall())
     items = []
     for r in rows:
         q = QUESTIONS.get(r["q_id"])
@@ -621,6 +739,7 @@ def api_exam_detail(exam_id):
         correct_display = perm.index(q["a"])
         items.append({
             "pos": r["pos"],
+            "q_id": r["q_id"],
             "subject_id": r["subject_id"],
             "subject": SUBJECTS[r["subject_id"]]["name"],
             "q": q["q"],
@@ -629,9 +748,145 @@ def api_exam_detail(exam_id):
             "correct": correct_display,
             "is_correct": r["chosen"] == correct_display,
             "explanation": q["e"],
+            "starred": r["q_id"] in starred_set,
         })
     result["items"] = items
     return jsonify({"result": result})
+
+
+@app.post("/api/star")
+@login_required()
+def api_star():
+    data = body()
+    q_id = data.get("q_id")
+    if not q_id or q_id not in QUESTIONS:
+        return err("ไม่พบรหัสข้อสอบที่ระบุ", 404)
+    starred = bool(data.get("starred", True))
+    con = db()
+    if starred:
+        con.execute(
+            "INSERT OR IGNORE INTO starred_questions (user_id, q_id, starred_at) VALUES (?, ?, ?)",
+            (g.user["id"], q_id, time.time())
+        )
+    else:
+        con.execute(
+            "DELETE FROM starred_questions WHERE user_id=? AND q_id=?",
+            (g.user["id"], q_id)
+        )
+    return jsonify({"ok": True, "q_id": q_id, "starred": starred})
+
+
+@app.get("/api/starred")
+@login_required()
+def api_starred():
+    rows = db().execute(
+        "SELECT q_id, starred_at FROM starred_questions WHERE user_id=? ORDER BY starred_at DESC",
+        (g.user["id"],)
+    ).fetchall()
+    starred = []
+    for r in rows:
+        q = QUESTIONS.get(r["q_id"])
+        if q:
+            starred.append({
+                "q_id": r["q_id"],
+                "subject_id": q["subject_id"],
+                "subject_name": SUBJECTS[q["subject_id"]]["name"],
+                "q": q["q"],
+                "starred_at": r["starred_at"]
+            })
+    return jsonify({"starred": starred, "count": len(starred)})
+
+
+@app.get("/api/mistakes/stats")
+@login_required()
+def api_mistakes_stats():
+    unmastered, by_subject = get_user_mistakes(g.user["id"])
+    return jsonify({
+        "total_mistakes": len(unmastered),
+        "by_subject": [{
+            "id": sid,
+            "name": SUBJECTS[sid]["name"],
+            "count": by_subject.get(sid, 0)
+        } for sid in sorted(SUBJECTS.keys())]
+    })
+
+
+@app.get("/api/analytics/competency")
+@login_required()
+def api_competency_analytics():
+    user_id = g.user["id"]
+    con = db()
+    exams = con.execute("SELECT * FROM exams WHERE user_id=? AND status='submitted'", (user_id,)).fetchall()
+    subj_scores = con.execute("""
+        SELECT ess.subject_id, SUM(ess.correct) AS total_correct, SUM(ess.total) AS total_attempted
+        FROM exam_subject_scores ess
+        JOIN exams e ON e.id = ess.exam_id
+        WHERE e.user_id = ? AND e.status = 'submitted'
+        GROUP BY ess.subject_id
+    """, (user_id,)).fetchall()
+
+    subj_map = {r["subject_id"]: {"correct": r["total_correct"], "attempted": r["total_attempted"]} for r in subj_scores}
+    unmastered, mistakes_by_subj = get_user_mistakes(user_id)
+    starred_rows = con.execute("SELECT q_id FROM starred_questions WHERE user_id=?", (user_id,)).fetchall()
+    starred_by_subj = {}
+    for r in starred_rows:
+        q = QUESTIONS.get(r["q_id"])
+        if q:
+            sid = q["subject_id"]
+            starred_by_subj[sid] = starred_by_subj.get(sid, 0) + 1
+
+    subjects_analytics = []
+    total_correct_all = 0
+    total_attempted_all = 0
+
+    for sid in sorted(SUBJECTS.keys()):
+        stat = subj_map.get(sid, {"correct": 0, "attempted": 0})
+        correct = stat["correct"]
+        attempted = stat["attempted"]
+        total_correct_all += correct
+        total_attempted_all += attempted
+
+        acc = round(correct * 100.0 / attempted, 1) if attempted > 0 else 0.0
+        if attempted == 0:
+            level = "not_attempted"
+            level_text = "ยังไม่ได้ทดสอบ"
+        elif acc >= 80.0:
+            level = "mastery"
+            level_text = "เชี่ยวชาญสูง (Mastery)"
+        elif acc >= 70.0:
+            level = "passed"
+            level_text = "ผ่านเกณฑ์มาตรฐาน (Pass)"
+        else:
+            level = "needs_focus"
+            level_text = "ควรเน้นทบทวน (Needs Focus)"
+
+        subjects_analytics.append({
+            "subject_id": sid,
+            "subject_name": SUBJECTS[sid]["name"],
+            "total_questions_in_bank": len(SUBJECTS[sid]["ids"]),
+            "attempted": attempted,
+            "correct": correct,
+            "accuracy": acc,
+            "level": level,
+            "level_text": level_text,
+            "active_mistakes": mistakes_by_subj.get(sid, 0),
+            "starred_count": starred_by_subj.get(sid, 0),
+        })
+
+    overall_acc = round(total_correct_all * 100.0 / total_attempted_all, 1) if total_attempted_all > 0 else 0.0
+    passed_count = sum(1 for e in exams if e["passed"])
+
+    return jsonify({
+        "overall": {
+            "exams_completed": len(exams),
+            "total_answered": total_attempted_all,
+            "overall_accuracy": overall_acc,
+            "exams_passed": passed_count,
+            "total_unmastered_mistakes": len(unmastered),
+            "total_starred": len(starred_rows)
+        },
+        "subjects": subjects_analytics
+    })
 
 
 # --------------------------------------------------------------------------- #
