@@ -45,19 +45,33 @@
   // ถ้าล็อกอินอยู่แล้ว ไปหน้าหลักเลย
   try { await api("/api/me", { noRedirect: true }); location.href = "/home.html"; return; } catch (_) {}
 
-  document.getElementById("login-form").addEventListener("submit", async ev => {
-    ev.preventDefault();
+  async function doLogin(force = false) {
     const btn = document.getElementById("btn-login");
     btn.disabled = true; msg.innerHTML = "";
+    const u = document.getElementById("username").value;
+    const p = document.getElementById("password").value;
     try {
       await api("/api/login", { method: "POST", noRedirect: true, body: {
-        username: document.getElementById("username").value,
-        password: document.getElementById("password").value } });
+        username: u, password: p, force: force } });
       location.href = "/home.html";
     } catch (e) {
-      msg.innerHTML = `<div class="alert error">${esc(e.message)}</div>`;
       btn.disabled = false;
+      if (e.status === 409) {
+        msg.innerHTML = `<div class="alert warn" style="margin-bottom:14px">
+          <div>${esc(e.message)}</div>
+          <button type="button" class="btn sm" id="btn-force-login" style="margin-top:10px;background:var(--primary);color:#fff">⚡ เข้าใช้งานที่เครื่องนี้ทันที</button>
+        </div>`;
+        const fBtn = document.getElementById("btn-force-login");
+        if (fBtn) fBtn.onclick = () => doLogin(true);
+      } else {
+        msg.innerHTML = `<div class="alert error">${esc(e.message)}</div>`;
+      }
     }
+  }
+
+  document.getElementById("login-form").addEventListener("submit", ev => {
+    ev.preventDefault();
+    doLogin(false);
   });
 })();
 </script>

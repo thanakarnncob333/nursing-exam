@@ -35,7 +35,7 @@ QUESTIONS_DIR = os.environ.get("QUESTIONS_DIR", os.path.join(BASE_DIR, "question
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
 SESSION_TIMEOUT = int(os.environ.get("SESSION_TIMEOUT", "120"))
-PER_SUBJECT = int(os.environ.get("PER_SUBJECT", "30"))
+PER_SUBJECT = int(os.environ.get("PER_SUBJECT", "20"))
 PASS_PERCENT = float(os.environ.get("PASS_PERCENT", "70"))
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,30}$")
@@ -298,13 +298,18 @@ def api_login():
     con.execute("BEGIN IMMEDIATE")
     try:
         # ลบ session เก่าที่หมดอายุ (ไม่มี heartbeat) ของผู้ใช้นี้
+        force = bool(data.get("force"))
         con.execute("DELETE FROM sessions WHERE user_id = ? AND last_seen < ?",
                     (user["id"], now - SESSION_TIMEOUT))
         active = con.execute("SELECT 1 FROM sessions WHERE user_id = ?", (user["id"],)).fetchone()
-        if active:
+        if active and not force:
             con.execute("ROLLBACK")
-            return err("บัญชีนี้กำลังถูกใช้งานอยู่บนอุปกรณ์อื่น ไม่สามารถล็อกอินซ้อนได้ "
-                       "(ให้ออกจากระบบที่เครื่องเดิมก่อน หรือรอสักครู่หากปิดหน้าเว็บไปแล้ว)", 409)
+            return jsonify({
+                "error": "บัญชีนี้กำลังถูกใช้งานอยู่บนอุปกรณ์อื่น (หากเป็นคุณเองที่เพิ่งเปิดใหม่ สามารถกด 'เข้าใช้งานที่เครื่องนี้' ได้ทันที)",
+                "can_force": True
+            }), 409
+        if active and force:
+            con.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
         con.execute(
             "INSERT INTO sessions (token, user_id, created_at, last_seen, ip) VALUES (?,?,?,?,?)",
             (token, user["id"], now, now, request.remote_addr),
@@ -370,10 +375,22 @@ def exam_row(exam_id):
     return db().execute("SELECT * FROM exams WHERE id = ?", (exam_id,)).fetchone()
 
 
-def build_exam(user_id):
+def build_exam(user_id, subject_id=None):
     con = db()
     picks = []
-    for sid in sorted(SUBJECTS):
+    if subject_id == "all":
+        for sid in sorted(SUBJECTS):
+            ids = SUBJECTS[sid]["ids"]
+            chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
+            picks.extend((sid, qid) for qid in chosen)
+    elif subject_id is not None and (isinstance(subject_id, int) or str(subject_id).isdigit()) and int(subject_id) in SUBJECTS:
+        sid = int(subject_id)
+        ids = SUBJECTS[sid]["ids"]
+        chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
+        picks.extend((sid, qid) for qid in chosen)
+    else:
+        # ค่าเริ่มต้น: สุ่มทำทีละวิชา เริ่มจากวิชาที่ 1
+        sid = min(SUBJECTS.keys()) if SUBJECTS else 1
         ids = SUBJECTS[sid]["ids"]
         chosen = random.sample(ids, min(PER_SUBJECT, len(ids)))
         picks.extend((sid, qid) for qid in chosen)
@@ -405,19 +422,31 @@ def build_exam(user_id):
 def exam_payload(exam):
     rows = db().execute("SELECT * FROM exam_items WHERE exam_id=? ORDER BY pos", (exam["id"],)).fetchall()
     items = []
+    sids = set()
     for r in rows:
-        q = QUESTIONS[r["q_id"]]
+        q = QUESTIONS.get(r["q_id"])
+        if not q:
+            continue
         perm = json.loads(r["perm"])
+        sids.add(r["subject_id"])
         items.append({
             "pos": r["pos"],
             "subject_id": r["subject_id"],
-            "subject": SUBJECTS[r["subject_id"]]["name"],
+            "subject": SUBJECTS[r["subject_id"]]["name"] if r["subject_id"] in SUBJECTS else str(r["subject_id"]),
             "q": q["q"],
             "choices": [q["c"][i] for i in perm],  # ไม่ส่งเฉลยไปที่เบราว์เซอร์
             "chosen": r["chosen"],
             "flagged": bool(r["flagged"]),
         })
-    return {"id": exam["id"], "started_at": exam["started_at"], "total": exam["total"], "items": items}
+    single_sid = list(sids)[0] if len(sids) == 1 else None
+    return {
+        "id": exam["id"],
+        "started_at": exam["started_at"],
+        "total": exam["total"],
+        "subject_id": single_sid,
+        "subject_name": SUBJECTS[single_sid]["name"] if single_sid and single_sid in SUBJECTS else None,
+        "items": items,
+    }
 
 
 @app.post("/api/exam/start")
@@ -425,10 +454,12 @@ def exam_payload(exam):
 def api_exam_start():
     if not SUBJECTS:
         return err("ยังไม่มีคลังข้อสอบ", 500)
+    data = body()
+    req_sid = data.get("subject_id")
     open_exam = db().execute(
         "SELECT * FROM exams WHERE user_id=? AND status='in_progress'", (g.user["id"],)).fetchone()
     if open_exam is None:
-        exam_id = build_exam(g.user["id"])
+        exam_id = build_exam(g.user["id"], subject_id=req_sid)
         open_exam = exam_row(exam_id)
     return jsonify({"exam": exam_payload(open_exam)})
 
@@ -529,6 +560,7 @@ def api_exam_abandon():
 def exam_summary(exam):
     subj = db().execute("SELECT * FROM exam_subject_scores WHERE exam_id=? ORDER BY subject_id",
                         (exam["id"],)).fetchall()
+    single_sid = subj[0]["subject_id"] if len(subj) == 1 else None
     return {
         "id": exam["id"],
         "status": exam["status"],
@@ -539,6 +571,8 @@ def exam_summary(exam):
         "percent": exam["percent"],
         "passed": None if exam["passed"] is None else bool(exam["passed"]),
         "pass_percent": PASS_PERCENT,
+        "subject_id": single_sid,
+        "subject_name": SUBJECTS[single_sid]["name"] if single_sid and single_sid in SUBJECTS else ("รวมทุกวิชา" if len(subj) > 1 else None),
         "subjects": [{
             "id": s["subject_id"],
             "name": SUBJECTS[s["subject_id"]]["name"] if s["subject_id"] in SUBJECTS else str(s["subject_id"]),

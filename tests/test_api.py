@@ -11,7 +11,7 @@ test_data_dir = tempfile.mkdtemp()
 os.environ["DATA_DIR"] = test_data_dir
 os.environ["ADMIN_USERNAME"] = "admin"
 os.environ["ADMIN_PASSWORD"] = "admin1234"
-os.environ["PER_SUBJECT"] = "30"
+os.environ["PER_SUBJECT"] = "20"
 os.environ["PASS_PERCENT"] = "70"
 
 from app import app, init_db, load_questions, SUBJECTS, QUESTIONS
@@ -85,16 +85,17 @@ class TestNursingExamApp(unittest.TestCase):
         student = app.test_client()
         student.post("/api/login", json={"username": "nurse_student1", "password": "password123"})
 
-        # Start exam
-        res = student.post("/api/exam/start")
+        # Start exam for Subject 1 (20 items)
+        res = student.post("/api/exam/start", json={"subject_id": 1})
         self.assertEqual(res.status_code, 200)
         exam_data = res.get_json()["exam"]
         exam_id = exam_data["id"]
         
-        # Verify exam structure: 9 subjects x 30 questions = 270 questions
+        # Verify exam structure: 20 questions for Subject 1
         items = exam_data["items"]
-        self.assertEqual(len(items), 270, "Exam must contain 270 questions (30 per subject x 9 subjects)")
-        self.assertEqual(exam_data["total"], 270)
+        self.assertEqual(len(items), 20, "Exam must contain 20 questions per subject")
+        self.assertEqual(exam_data["total"], 20)
+        self.assertEqual(exam_data["subject_id"], 1)
 
         # Verify no answers/explanations leaked in exam payload
         for item in items:
@@ -102,8 +103,8 @@ class TestNursingExamApp(unittest.TestCase):
             self.assertNotIn("e", item, "Explanation must not be leaked")
             self.assertEqual(len(item["choices"]), 4, "Must have 4 choices")
 
-        # Answer some questions (e.g. first 10 questions)
-        for pos in range(1, 11):
+        # Answer questions (e.g. first 5 questions)
+        for pos in range(1, 6):
             res = student.post("/api/exam/answer", json={"exam_id": exam_id, "pos": pos, "chosen": 0})
             self.assertEqual(res.status_code, 200)
 
@@ -112,17 +113,18 @@ class TestNursingExamApp(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()["ok"])
 
-        # View exam details/results
+        # View exam details/results immediately with answers & explanations
         res = student.get(f"/api/exams/{exam_id}")
         self.assertEqual(res.status_code, 200)
         detail = res.get_json()["result"]
-        self.assertEqual(detail["total"], 270)
+        self.assertEqual(detail["total"], 20)
         self.assertIn("score", detail)
         self.assertIn("percent", detail)
         self.assertIn("passed", detail)
-        self.assertEqual(len(detail["subjects"]), 9, "Must have summary for all 9 subjects")
+        self.assertEqual(len(detail["subjects"]), 1, "Must have summary for Subject 1")
+        self.assertEqual(detail["subjects"][0]["id"], 1)
         
-        # Now answers and explanations should be revealed in items
+        # Answers and explanations revealed immediately
         self.assertIn("correct", detail["items"][0])
         self.assertIn("explanation", detail["items"][0])
 

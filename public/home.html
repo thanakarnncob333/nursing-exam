@@ -9,29 +9,57 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
-<style>@media (max-width:640px){.hide-sm{display:none}}</style>
+<style>
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
+.sub-card { background: var(--card-solid); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; transition: transform .18s, box-shadow .2s; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.sub-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: rgba(14, 159, 142, .4); }
+.sub-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.sub-num-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: rgba(14, 159, 142, .14); color: var(--primary); font-weight: 700; font-size: 1rem; flex-shrink: 0; }
+.sub-name { font-weight: 600; font-size: 1.02rem; line-height: 1.45; }
+.sub-card-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.btn-sub-start { padding: 8px 16px; font-size: .88rem; font-weight: 600; }
+</style>
 </head>
 <body>
 <main class="container">
   <section class="card hero">
     <div>
-      <h1>พร้อมฝึกสอบหรือยัง?</h1>
-      <p class="muted" id="hero-desc">กำลังโหลด…</p>
+      <div style="display:inline-block;padding:4px 12px;background:rgba(14,159,142,.12);color:var(--primary);border-radius:999px;font-weight:600;font-size:.85rem;margin-bottom:10px">
+        ⚡ ข้อสอบสถานการณ์ทางคลินิกระดับ 8 · เฉลยทันทีรายวิชา
+      </div>
+      <h1 style="margin:0 0 10px 0">พร้อมฝึกวิเคราะห์สถานการณ์ทางการพยาบาลหรือยัง?</h1>
+      <p class="muted" id="hero-desc">
+        ระบบจะสุ่มข้อสอบสถานการณ์จริงวิชาละ 20 ข้อ ส่งตรวจและดูเฉลยละเอียดทันทีเมื่อจบแต่ละวิชา · เกณฑ์ผ่าน 70%
+      </p>
       <div id="resume-box"></div>
-      <div class="row" style="margin-top:18px">
-        <button class="btn lg" id="btn-start">▶ เริ่มทำข้อสอบ</button>
+      <div class="row" style="margin-top:18px;gap:12px;flex-wrap:wrap">
+        <button class="btn lg" id="btn-start">▶ เริ่มทำข้อสอบ (เริ่มจากวิชา 1: ความรู้และทักษะ)</button>
       </div>
       <p class="muted" style="font-size:.88rem;margin-top:14px">
-        ไม่จำกัดเวลา · คำตอบถูกบันทึกอัตโนมัติ ปิดหน้าเว็บแล้วกลับมาทำต่อได้ · เฉลยแสดงหลังส่งข้อสอบ
+        ⏱ ทำทีละวิชา (20 ข้อ) · ไม่จำกัดเวลา · เฉลยละเอียดพร้อมเหตุผลทางคลินิกทันทีหลังส่งวิชานั้น
       </p>
     </div>
-    <div>
-      <strong>วิชาที่สอบ</strong>
-      <ul class="subject-list" id="subjects"></ul>
+    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:14px;border-radius:18px;background:rgba(14,159,142,.06);border:1px solid rgba(14,159,142,.18)">
+      <div style="font-size:3rem;font-weight:800;color:var(--primary)">9</div>
+      <div style="font-weight:600;font-size:1.05rem">วิชาการพยาบาล</div>
+      <div class="muted" style="font-size:.85rem;text-align:center;margin-top:4px">วิชาละ 20 ข้อ (รวม 180 ข้อ)<br>เฉลยและตรวจคะแนนทีละวิชา</div>
     </div>
   </section>
 
-  <section class="card">
+  <!-- รายการวิชาทั้ง 9 วิชาให้เลือกสอบได้โดยตรง -->
+  <section class="card" style="margin-top:20px">
+    <div class="row between">
+      <div>
+        <h2 style="margin:0 0 4px 0">เลือกสอบรายวิชา (วิชาละ 20 ข้อ)</h2>
+        <div class="muted" style="font-size:.88rem">สามารถเลือกฝึกเฉพาะวิชาที่ต้องการได้ โดยระบบจะสุ่มข้อสอบ 20 ข้อและเฉลยทันทีหลังส่ง</div>
+      </div>
+    </div>
+    <div class="sub-grid" id="subjects-grid">
+      <div class="empty">กำลังโหลดรายวิชา…</div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:20px">
     <h2>ประวัติการสอบของฉัน</h2>
     <div id="history"><div class="empty">กำลังโหลด…</div></div>
   </section>
@@ -41,42 +69,118 @@
 (async () => {
   const me = await initPage("home");
   const cfg = me.config;
-  const total = cfg.per_subject * cfg.subjects.length;
-  document.getElementById("hero-desc").textContent =
-    `ระบบจะสุ่มข้อสอบวิชาละ ${cfg.per_subject} ข้อ จาก ${cfg.subjects.length} วิชา รวม ${total} ข้อ · เกณฑ์ผ่าน ${cfg.pass_percent}%`;
-  document.getElementById("subjects").innerHTML =
-    cfg.subjects.map(s => `<li><span class="n">${s.id}</span>${esc(s.name)}</li>`).join("");
+  const subjects = cfg.subjects || [];
 
+  // ดึงประวัติการสอบ
+  let historyList = [];
+  try {
+    const h = await api("/api/exams");
+    historyList = h.exams || [];
+  } catch (e) { console.error(e); }
+
+  // แผนที่ผลสอบล่าสุดของแต่ละวิชา
+  const lastSubScore = {};
+  for (const ex of historyList) {
+    if (ex.status === "submitted" && ex.subject_id && !lastSubScore[ex.subject_id]) {
+      lastSubScore[ex.subject_id] = ex;
+    }
+  }
+
+  // แสดงผล Grid รายวิชา 9 วิชา
+  const gridEl = document.getElementById("subjects-grid");
+  gridEl.innerHTML = subjects.map(s => {
+    const last = lastSubScore[s.id];
+    let badgeHtml = '<span class="badge gray">ยังไม่ได้สอบ</span>';
+    if (last) {
+      badgeHtml = last.passed ?
+        `<span class="badge ok">✔ ล่าสุด ${last.score}/${last.total} (${fmtPct(last.percent)})</span>` :
+        `<span class="badge bad">✘ ล่าสุด ${last.score}/${last.total} (${fmtPct(last.percent)})</span>`;
+    }
+    return `
+      <div class="sub-card">
+        <div>
+          <div class="sub-card-top">
+            <span class="sub-num-badge">${s.id}</span>
+            <div>${badgeHtml}</div>
+          </div>
+          <div class="sub-name" style="margin-top:10px">${esc(s.name)}</div>
+          <div class="muted" style="font-size:.82rem;margin-top:6px">สถานการณ์ทางคลินิก · 20 ข้อ</div>
+        </div>
+        <div class="sub-card-bottom">
+          <button class="btn btn-sub-start" onclick="startSubject(${s.id})">▶ เริ่มสอบวิชานี้</button>
+        </div>
+      </div>`;
+  }).join("");
+
+  window.startSubject = async (sid) => {
+    try {
+      await api("/api/exam/start", { method: "POST", body: { subject_id: sid } });
+      location.href = "/exam.html";
+    } catch (e) { toast(e.message, "error"); }
+  };
+
+  // ตรวจสอบข้อสอบที่ค้างอยู่
   const cur = await api("/api/exam/current");
   const startBtn = document.getElementById("btn-start");
   if (cur.exam) {
     const answered = cur.exam.items.filter(i => i.chosen !== null).length;
-    startBtn.textContent = "▶ ทำข้อสอบต่อ";
-    document.getElementById("resume-box").innerHTML =
-      `<div class="alert info" style="margin-top:12px">คุณมีข้อสอบที่ทำค้างอยู่ — ตอบแล้ว ${answered}/${cur.exam.total} ข้อ
-       <button class="btn ghost sm" id="btn-abandon" style="margin-left:8px">ยกเลิกชุดนี้</button></div>`;
+    const subName = cur.exam.subject_name ? ` (วิชา: ${cur.exam.subject_name})` : "";
+    startBtn.textContent = `▶ ทำข้อสอบต่อ${subName}`;
+    document.getElementById("resume-box").innerHTML = `
+      <div class="alert info" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span>คุณมีข้อสอบที่ทำค้างอยู่${subName} — ทำไปแล้ว ${answered}/${cur.exam.total} ข้อ</span>
+        <button class="btn ghost sm" id="btn-abandon">ยกเลิกชุดนี้</button>
+      </div>`;
     document.getElementById("btn-abandon").onclick = async () => {
-      if (!await confirmBox("ยกเลิกชุดข้อสอบที่ทำค้าง?", "คำตอบทั้งหมดของชุดนี้จะถูกลบและเริ่มชุดใหม่ได้", "ยกเลิกชุดนี้", true)) return;
+      if (!await confirmBox("ยกเลิกชุดข้อสอบที่ทำค้าง?", "คำตอบของชุดนี้จะถูกลบและสามารถเลือกเริ่มชุดใหม่ได้", "ยกเลิกชุดนี้", true)) return;
       await api("/api/exam/abandon", { method: "POST", body: { exam_id: cur.exam.id } });
       location.reload();
     };
   }
+
   startBtn.onclick = async () => {
     startBtn.disabled = true;
-    try { await api("/api/exam/start", { method: "POST" }); location.href = "/exam.html"; }
-    catch (e) { toast(e.message, "error"); startBtn.disabled = false; }
+    try {
+      await api("/api/exam/start", { method: "POST", body: { subject_id: 1 } });
+      location.href = "/exam.html";
+    } catch (e) {
+      toast(e.message, "error");
+      startBtn.disabled = false;
+    }
   };
 
-  const h = await api("/api/exams");
+  // แสดงตารางประวัติการสอบ
   const box = document.getElementById("history");
-  if (!h.exams.length) { box.innerHTML = '<div class="empty">ยังไม่มีประวัติการสอบ</div>'; return; }
-  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>ครั้งที่</th><th>เริ่มสอบ</th><th>ส่งเมื่อ</th><th>คะแนน</th><th>ร้อยละ</th><th>ผล</th><th></th></tr></thead><tbody>` +
-    h.exams.map((e, i) => `<tr>
-      <td>${h.exams.length - i}</td><td>${fmtDate(e.started_at)}</td><td>${fmtDate(e.submitted_at)}</td>
-      <td>${e.status === "submitted" ? e.score + "/" + e.total : "-"}</td><td>${fmtPct(e.percent)}</td>
-      <td>${e.status !== "submitted" ? '<span class="badge warn">กำลังทำ</span>' : e.passed ? '<span class="badge ok">ผ่าน</span>' : '<span class="badge bad">ไม่ผ่าน</span>'}</td>
-      <td>${e.status === "submitted" ? `<a class="btn sm secondary" href="/result.html?id=${e.id}">ดูผล/เฉลย</a>` : `<a class="btn sm" href="/exam.html">ทำต่อ</a>`}</td></tr>`).join("") +
-    "</tbody></table></div>";
+  if (!historyList.length) {
+    box.innerHTML = '<div class="empty">ยังไม่มีประวัติการสอบ</div>';
+  } else {
+    box.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr>
+        <th>ครั้งที่</th>
+        <th>วิชาที่สอบ</th>
+        <th>เริ่มสอบ</th>
+        <th>ส่งเมื่อ</th>
+        <th>คะแนน</th>
+        <th>ร้อยละ</th>
+        <th>ผลสอบ</th>
+        <th></th>
+      </tr></thead>
+      <tbody>` +
+      historyList.map((e, i) => {
+        const subTitle = e.subject_name ? (e.subject_id ? `วิชา ${e.subject_id}: ${esc(e.subject_name)}` : esc(e.subject_name)) : "รวมทุกวิชา";
+        return `<tr>
+          <td>${historyList.length - i}</td>
+          <td><strong>${subTitle}</strong></td>
+          <td>${fmtDate(e.started_at)}</td>
+          <td>${fmtDate(e.submitted_at)}</td>
+          <td>${e.status === "submitted" ? e.score + "/" + e.total : "-"}</td>
+          <td>${fmtPct(e.percent)}</td>
+          <td>${e.status !== "submitted" ? '<span class="badge warn">กำลังทำ</span>' : e.passed ? '<span class="badge ok">✔ ผ่าน</span>' : '<span class="badge bad">✘ ไม่ผ่าน</span>'}</td>
+          <td>${e.status === "submitted" ? `<a class="btn sm secondary" href="/result.html?id=${e.id}">ดูเฉลยละเอียด</a>` : `<a class="btn sm" href="/exam.html">ทำต่อ</a>`}</td>
+        </tr>`;
+      }).join("") +
+      "</tbody></table></div>";
+  }
 })().catch(e => { if (e.status !== 401) console.error(e); });
 </script>
 </body>
