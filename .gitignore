@@ -19,3 +19,5 @@ tools/*.exe
 # System
 .DS_Store
 Thumbs.db
+scratch/
+

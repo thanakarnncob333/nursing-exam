@@ -5,22 +5,24 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT app:app
-    disk:
-      name: nursing-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.0
+        value: 3.12.10
       - key: DATA_DIR
-        value: /var/data
+        value: ./data
       - key: COOKIE_SECURE
         value: "1"
       - key: PER_SUBJECT
-        value: "30"
+        value: "20"
       - key: PASS_PERCENT
         value: "70"
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
         generateValue: true
+    # หมายเหตุ: สำหรับแพ็กเกจฟรี (Free Tier) Render ไม่รองรับ Persistent Disk
+    # หากต้องการเก็บฐานข้อมูลแบบถาวรบน Render เมื่ออัปเกรดเป็น Starter ($7/mo) สามารถเปิดใช้ disk ด้านล่างนี้ได้:
+    # disk:
+    #   name: nursing-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
