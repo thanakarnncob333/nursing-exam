@@ -19,7 +19,7 @@ services:
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
-        generateValue: true
+        value: admin1234
     # หมายเหตุ: สำหรับแพ็กเกจฟรี (Free Tier) Render ไม่รองรับ Persistent Disk
     # หากต้องการเก็บฐานข้อมูลแบบถาวรบน Render เมื่ออัปเกรดเป็น Starter ($7/mo) สามารถเปิดใช้ disk ด้านล่างนี้ได้:
     # disk:

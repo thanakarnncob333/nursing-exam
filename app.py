@@ -173,10 +173,10 @@ def init_db():
         con.execute("ALTER TABLE exams ADD COLUMN time_limit INTEGER NOT NULL DEFAULT 0")
     except Exception:
         pass
-    row = con.execute("SELECT COUNT(*) AS n FROM users WHERE role='admin'").fetchone()
-    if row["n"] == 0:
-        username = os.environ.get("ADMIN_USERNAME", "admin").strip().lower()
-        password = os.environ.get("ADMIN_PASSWORD")
+    username = os.environ.get("ADMIN_USERNAME", "admin").strip().lower()
+    password = os.environ.get("ADMIN_PASSWORD")
+    row = con.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    if not row:
         generated = password is None
         if generated:
             password = secrets.token_urlsafe(9)
@@ -191,6 +191,11 @@ def init_db():
             print(f"[SETUP] สร้างแอดมินเริ่มต้น  username: {username}  password: {password}")
             print("[SETUP] กรุณาเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบครั้งแรก")
             print("=" * 60, flush=True)
+    elif password:
+        con.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(password, method=PW_METHOD), row["id"]),
+        )
     con.close()
 
 
